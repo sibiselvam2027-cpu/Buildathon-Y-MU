@@ -2,6 +2,8 @@ import {destinations,parking,durations,durationText,rateFor,totalFor,getBooking,
 import {parkingMap} from './map.mjs';
 import {mountPanorama} from './panorama.mjs';
 import {interpretRequest} from './assistant.mjs';
+import {forestProgress,treeMinutes} from './forest-growth.mjs';
+import {mountForest} from './forest-scene.mjs';
 
 const icons = {
   pin:'<path d="M20 10c0 5-8 10-8 10s-8-5-8-10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
@@ -14,6 +16,7 @@ const icons = {
   arrow:'<path d="M12 19V5m-6 6 6-6 6 6"/>',
   direction:'<path d="m4 10 16-6-6 16-3-7-7-3Z"/>',
   sparkles:'<path d="m10 2 2.1 6 5.9 2-5.9 2L10 18l-2-6-6-2 6-2 2-6Zm8.5 11 .9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6Z"/>',
+  tree:'<path d="M12 4 6.5 11h2.2L5 16h14l-3.7-5h2.2L12 4Zm0 12v4"/>',
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8v.1"/>',
   locate:'<circle cx="12" cy="12" r="6"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/><circle cx="12" cy="12" r="2"/>',
   ticket:'<path d="M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4V7Zm12 0v2m0 2v2m0 2v2"/>',
@@ -59,11 +62,38 @@ let toastTimer;
 let alertedBooking = null;
 let agentOffer = null;
 let agentRequest = 0;
+let forestStamp = '';
 
 document.querySelectorAll('[data-icon]').forEach(node=>{node.innerHTML=icon(node.dataset.icon);});
 $('#destination').innerHTML=destinations.map(place=>'<option value="'+place.id+'">'+place.name+'</option>').join('');
 $('#duration').innerHTML=durations.map(minutes=>'<option value="'+minutes+'">'+durationText(minutes)+'</option>').join('');
 const map = parkingMap($('#map'),icon,selectPin);
+const forest = mountForest($('#forest-scene'));
+
+function showStage(view) {
+  const isMap=view==='map';
+  $('#parking-view').hidden=!isMap;
+  $('#forest-view').hidden=isMap;
+  $('#map-status').hidden=!isMap;
+  $('#map-tab').setAttribute('aria-selected',String(isMap));
+  $('#forest-tab').setAttribute('aria-selected',String(!isMap));
+  $('#map-tab').tabIndex=isMap?0:-1;
+  $('#forest-tab').tabIndex=isMap?-1:0;
+}
+
+function renderForest() {
+  const growth=forestProgress(state.bookings);
+  const stamp=[growth.minutes,growth.active,growth.vehicle].join(':');
+  if (stamp===forestStamp) return;
+  forestStamp=stamp;
+  $('#forest-minutes').textContent=durationText(growth.minutes);
+  $('#forest-trees').textContent=String(growth.trees);
+  $('#forest-percent').textContent=growth.progress+'%';
+  $('#forest-growth').value=growth.progress;
+  $('#forest-note').textContent=growth.minutes===0 ? 'Every '+durationText(treeMinutes)+' parked grows a tree.' : durationText(growth.minutesToNext)+' of parked time to your next tree.';
+  $('#forest-advance').hidden=!growth.active;
+  forest.update(growth);
+}
 
 function syncControls() {
   const {destination,vehicle,duration,sort}=state.query;
@@ -134,6 +164,7 @@ function card(spot,query,selectedId) {
 
 function selectPin(id) {
   highlight=id;
+  showStage('map');
   render();
   map.focus(spotById(id));
 }
@@ -191,7 +222,7 @@ function panorama(spot) {
 function showDemo() {
   mode='demo';
   modal('Gurugram prototype','What’s simulated?',
-    '<ul class="scenario-list"><li>Public lots, office visitor bays and society spaces use sample hosts, location pins, gate instructions, prices, ratings and separate car/bike capacities.</li><li>OpenStreetMap supplies the map when available. Demo directions link to approximate pins. The map has a labeled offline schematic.</li><li>360° previews are generated 3D scenes. Availability, reservations, payment receipts and reviews are stored in this browser.</li><li>Confirm your arrival and departure manually. Overtime prompts appear in the app. Use the demo clock to show expiry in seconds.</li></ul>');
+    '<ul class="scenario-list"><li>Parking locations, prices, availability and receipts use sample data. Arrival and departure are self-reported.</li><li>OpenStreetMap supplies map imagery when available. The map has an offline schematic, and directions use approximate pins.</li><li>360° previews are generated 3D scenes. Parking and reviews stay in this browser when it supports storage.</li><li>Forest growth is based on time parked in this demo. Each tree represents two parked hours. The percentage tracks the next tree milestone.</li></ul>');
 }
 
 function sessionLink(booking,spot) {
@@ -217,7 +248,7 @@ function showSessions() {
       receipt+'<p>One spot is reserved. Your timer starts when you confirm you’ve parked.</p><div class="note-box"><b>'+spot.address+'</b><br>'+spot.entry+'</div><div class="modal-actions">'+sessionLink(booking,spot)+'<button class="primary" data-action="arrive" data-id="'+booking.id+'">'+icon('check')+' I’ve parked · Pay '+amount(booking.amount)+'</button></div><p class="modal-small">Demo payment. No money will be charged.</p><button class="text-button" data-action="cancel" data-id="'+booking.id+'">Cancel reservation</button>');
   } else {
     modal('Active parking session',spot.name,
-      '<div class="session-timer"><strong id="session-time" aria-hidden="true">00:00</strong><span id="session-caption"></span><p class="screen-reader-alert" id="timer-alert" role="alert"></p></div>'+receipt+'<div class="note-box"><b>'+icon('check')+' Demo payment successful</b><br>'+amount(booking.amount)+' · receipt '+esc(booking.receipt)+' · ends '+clockFormat.format(booking.ends)+' IST</div><div class="modal-actions"><button class="primary" data-action="leave" data-id="'+booking.id+'">I’ve moved my vehicle '+icon('arrow-right')+'</button></div><button class="text-button" data-action="expire" data-id="'+booking.id+'">Demo clock · Simulate time expiry</button>');
+      '<div class="session-timer"><strong id="session-time" aria-hidden="true">00:00</strong><span id="session-caption"></span><p class="screen-reader-alert" id="timer-alert" role="alert"></p></div>'+receipt+'<div class="note-box"><b>'+icon('check')+' Demo payment successful</b><br>'+amount(booking.amount)+' · receipt '+esc(booking.receipt)+' · ends '+clockFormat.format(booking.ends)+' IST</div><div class="modal-actions"><button class="primary" data-action="leave" data-id="'+booking.id+'">I’ve moved my vehicle '+icon('arrow-right')+'</button><button class="secondary" data-action="forest">'+icon('tree')+' View my forest</button></div><button class="text-button" data-action="expire" data-id="'+booking.id+'">Demo clock · Simulate time expiry</button>');
     tick();
   }
 }
@@ -266,6 +297,7 @@ function timerText(seconds) {
 }
 
 function tick() {
+  renderForest();
   const booking=getBooking(state);
   const banner=$('#booking-banner');
   const ended=!booking && state.bookings.some(value=>value.id===state.reviewPending && value.status==='ended' && !value.review);
@@ -354,6 +386,7 @@ function applyQuery(next,fly=false) {
   highlight=null;
   save();
   syncControls();
+  if (fly) showStage('map');
   render(fly);
 }
 
@@ -372,6 +405,21 @@ $('#nav-explore').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
 $('#nav-sessions').onclick=showSessions;
 $('#demo-info').onclick=showDemo;
 $('#footer-info').onclick=showDemo;
+for (const view of ['forest','map']) {
+  const tab=$('#'+view+'-tab');
+  tab.addEventListener('click',()=>{
+    showStage(view);
+    if (view==='map') render(true);
+  });
+  tab.addEventListener('keydown',event=>{
+    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    event.preventDefault();
+    const next=event.key==='Home'?'forest':event.key==='End'?'map':(view==='map'?'forest':'map');
+    showStage(next);
+    $('#'+next+'-tab').focus();
+    if (next==='map') render(true);
+  });
+}
 agentInput.addEventListener('input',clearAgentOffer);
 agentForm.addEventListener('submit',event=>{
   event.preventDefault();
@@ -422,6 +470,26 @@ document.addEventListener('click',async event=>{
   if (action==='spot') spotDetails(spotById(id));
   if (action==='panorama') panorama(spotById(id));
   if (action==='sessions') showSessions();
+  if (action==='forest') {
+    showStage('forest');
+    studio.close();
+    $('#forest-tab').focus({preventScroll:true});
+    const behavior=window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth';
+    $('#forest-view').scrollIntoView({block:'nearest',behavior});
+  }
+  if (action==='forest-rotate') forest.rotate();
+  if (action==='forest-simulate') {
+    button.disabled=true;
+    try {
+      await changeBooking(value=>{
+        const booking=getBooking(value);
+        if (booking?.status!=='active') return false;
+        booking.fastForwardMs=(booking.fastForwardMs??0)+30*60_000;
+        return true;
+      });
+      tick();
+    } finally {button.disabled=false;}
+  }
   if (action==='focus') {
     selectPin(id);
     document.querySelector('.spot-select[data-id="'+id+'"]')?.focus({preventScroll:true});

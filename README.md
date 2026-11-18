@@ -138,18 +138,17 @@ The app needs no build, API keys or account. For Netlify, connect this fork and 
 
 ### Judge walkthrough
 
-1. Start at DLF CyberHub with **Car** and **2 hr**. Green pins show available parking and red pins show full or vehicle-unavailable parking. Open a red pin to inspect the unavailable listing.
-2. Compare the five nearest eligible spaces, or sort by price and rating. Switch between the public lot, office and society filters.
-3. Open **360°** on any result. Drag to look around or jump to the gate, bays or exit. Open the listing to see amenities, gate instructions and directions.
-4. **Reserve spot**. Check the booking code and confirm one spot has been held. **Open Google Maps** hands off directions to the sample coordinates. Select **I’ve parked** to confirm simulated payment and start the countdown.
-5. Use **Demo clock · Simulate time expiry** to trigger the overdue warning, or check out before the timer ends. Select **I’ve moved my vehicle**, give a star rating and submit. Check **My parking** to see the completed session.
-6. Try **Ask ParkEasy** with “Covered bike parking near CyberHub for two hours”. The assistant sets the search criteria and applies them to the same inventory.
+1. Open **Ask ParkEasy** and tap **Covered bike at CyberHub**. The inline agent offers one bookable match with the price, location, and duration. Tap **Reserve** to go directly to the parking pass. The map and results are available for comparison.
+2. Select **I’ve parked** to confirm the simulated payment and start the session.
+3. Select **View my forest**. Use **Demo · Add 30 min** to demonstrate the forest growing in increments. After 120 parked minutes, the first tree is complete. Rotate the scene to see the garage and forest.
+4. Open **My parking** and select **I’ve moved my vehicle**. Pick a star rating and submit your review. Check **My parking** to see the completed session.
 
 ### How it works
 
 - The hard part is preserving a consistent inventory through reserve, manual check-in and checkout. A reservation holds one slot for its vehicle. Check-in records demo payment and an end time exactly once. Checkout restores the slot and opens review. Session state, the last search and reviews persist in browser storage. Browsers with Web Locks serialize booking transitions across tabs on the same origin.
 - Recommendations check the vehicle’s available capacity and the selected preferences within 900 m of the chosen DLF destination. The app returns up to five using straight-line distance by default. Price and rating sorts use the same eligibility checks.
-- The assistant runs the Apache 2.0 [MiniLM sentence model](https://huggingface.co/Xenova/all-MiniLM-L6-v2) through Transformers.js in the browser. It matches free-text wording to supported search intents and uses the parking data for results. Common requests also have a fast rules-based fallback if the model files are unavailable.
+- The assistant matches requests in English or Hinglish to supported destinations, vehicles, durations, amenities and budgets. It uses the Apache 2.0 [MiniLM sentence model](https://huggingface.co/Xenova/all-MiniLM-L6-v2) through Transformers.js when ready. Local matching returns results while the model is loading or unavailable. A match is held only after the driver confirms the quoted reservation.
 - Online map imagery uses [OpenStreetMap](https://www.openstreetmap.org/copyright). Google Maps opens only through a directions link. A labeled DLF schematic keeps browsing available if the map cannot load.
 - Listings, host permissions, addresses/entrances, prices, ratings, capacities, receipts and 360° scenes are simulated. Demo availability assumes the listing is open for the requested session. Arrival and departure are self-reported. There is no supplier UI, payment gateway, shared inventory, or background alert service.
+- The isometric garage and personal forest use original canvas artwork. The forest uses actual or simulated time between check-in and checkout, with one tree per 120 parked minutes. The displayed percentage measures progress toward the next tree milestone.
 - For a real pilot, onboard permitted hosts offline in one DLF cluster and build enough legal supply within 500 m before inviting drivers.
