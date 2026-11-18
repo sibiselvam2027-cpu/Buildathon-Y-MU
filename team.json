@@ -1,9 +1,12 @@
 {
-  "team_name": "CHANGE_ME",
-  "project_title": "CHANGE_ME",
-  "one_liner": "CHANGE_ME: one sentence about what you're building",
-  "track": "CHANGE_ME: physical-world | ai-agents | area-of-expertise",
+  "team_name": "ParkEasy",
+  "project_title": "ParkEasy",
+  "one_liner": "Reserve available public and privately hosted parking around DLF Cyber City before you arrive.",
+  "track": "physical-world",
   "members": [
-    { "name": "CHANGE_ME", "github": "CHANGE_ME" }
+    {
+      "name": "Sibi Selvam",
+      "github": "sibiselvam2027-cpu"
+    }
   ]
 }
