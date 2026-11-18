@@ -118,11 +118,38 @@ See [RULES.md](RULES.md) for the full list.
 
 ## Your project
 
-_Replace this section with your project README:_
-- **Team:**
-- **Track:**
-- **Problem:** who faces it and why it happens
-- **What we built:** the core workflow
-- **The hardest part:** how we solved it
-- **How to run it:**
-- **Demo / screenshots:**
+### ParkEasy
+
+**Team:** ParkEasy  
+**Track:** Build for the Physical World  
+**Tagline:** Parking before you arrive.
+
+Drivers heading to DLF Cyber City often learn whether parking is available only after they reach the entrance. Public lots, office visitor bays and gated societies are hard to compare because each location has its own availability, access rules and prices. ParkEasy lets a driver pick an eligible space in advance and know which gate to use.
+
+### Run the demo
+
+With Python 3 installed, run this from the repository root and open http://localhost:8000.
+
+```sh
+python -m http.server 8000 --directory app
+```
+
+The app needs no build, API keys or account. For Netlify, connect this fork and use the checked-in publish directory configuration, or upload the `app` folder as a manual deploy.
+
+### Judge walkthrough
+
+1. Start at DLF CyberHub with **Car** and **2 hr**. Green pins show available parking and red pins show full or vehicle-unavailable parking. Open a red pin to inspect the unavailable listing.
+2. Compare the five nearest eligible spaces, or sort by price and rating. Switch between the public lot, office and society filters.
+3. Open **360°** on any result. Drag to look around or jump to the gate, bays or exit. Open the listing to see amenities, gate instructions and directions.
+4. **Reserve spot**. Check the booking code and confirm one spot has been held. **Open Google Maps** hands off directions to the sample coordinates. Select **I’ve parked** to confirm simulated payment and start the countdown.
+5. Use **Demo clock · Simulate time expiry** to trigger the overdue warning, or check out before the timer ends. Select **I’ve moved my vehicle**, give a star rating and submit. Check **My parking** to see the completed session.
+6. Try **Ask ParkEasy** with “Covered bike parking near CyberHub for two hours”. The assistant sets the search criteria and applies them to the same inventory.
+
+### How it works
+
+- The hard part is preserving a consistent inventory through reserve, manual check-in and checkout. A reservation holds one slot for its vehicle. Check-in records demo payment and an end time exactly once. Checkout restores the slot and opens review. Session state, the last search and reviews persist in browser storage. Browsers with Web Locks serialize booking transitions across tabs on the same origin.
+- Recommendations check the vehicle’s available capacity and the selected preferences within 900 m of the chosen DLF destination. The app returns up to five using straight-line distance by default. Price and rating sorts use the same eligibility checks.
+- The assistant runs the Apache 2.0 [MiniLM sentence model](https://huggingface.co/Xenova/all-MiniLM-L6-v2) through Transformers.js in the browser. It matches free-text wording to supported search intents and uses the parking data for results. Common requests also have a fast rules-based fallback if the model files are unavailable.
+- Online map imagery uses [OpenStreetMap](https://www.openstreetmap.org/copyright). Google Maps opens only through a directions link. A labeled DLF schematic keeps browsing available if the map cannot load.
+- Listings, host permissions, addresses/entrances, prices, ratings, capacities, receipts and 360° scenes are simulated. Demo availability assumes the listing is open for the requested session. Arrival and departure are self-reported. There is no supplier UI, payment gateway, shared inventory, or background alert service.
+- For a real pilot, onboard permitted hosts offline in one DLF cluster and build enough legal supply within 500 m before inviting drivers.

@@ -16,7 +16,11 @@ export const parking = [
   {id:'phase-gate',name:'Orchid Residency Guest Lot',type:'Society',code:'S03',area:'DLF Phase 3 · Main gate',lat:28.4961,lng:77.09217,car:0,bike:0,rate:35,bikeRate:15,rating:4.5,scene:'court',amenities:['Security','Well lit'],entry:'Use the demo society visitor gate beside the guard kiosk.',address:'DLF Phase 3, Gurugram'},
   {id:'moulsari-open',name:'Moulsari Avenue Parking',type:'Public lot',code:'M02',area:'Moulsari Avenue · Station side',lat:28.49835,lng:77.09237,car:5,bike:11,rate:30,bikeRate:15,rating:4.4,scene:'street',amenities:['Well lit','Wide bays'],entry:'Open demo lot on the station side of the avenue.',address:'Moulsari Avenue, DLF Phase 3, Gurugram'},
   {id:'ambience-deck',name:'Ambience Visitor Deck',type:'Public lot',code:'M11',area:'Ambience Mall · West approach',lat:28.50351,lng:77.09527,car:8,bike:10,rate:70,bikeRate:30,rating:4.6,scene:'deck',amenities:['Covered','CCTV','Lift access'],entry:'Follow the demo West approach signs to visitor level.',address:'West approach, Ambience Mall area, Gurugram'},
-  {id:'ambience-front',name:'Mall Front Visitor Lot',type:'Office',code:'M12',area:'NH 48 · Service lane',lat:28.50466,lng:77.09523,car:0,bike:0,rate:70,bikeRate:25,rating:4.4,scene:'open',amenities:['CCTV','Security'],entry:'Demo entrance off the NH 48 service lane.',address:'NH 48 service lane near Ambience Mall, Gurugram'}
+  {id:'ambience-front',name:'Mall Front Visitor Lot',type:'Office',code:'M12',area:'NH 48 · Service lane',lat:28.50466,lng:77.09523,car:0,bike:0,rate:70,bikeRate:25,rating:4.4,scene:'open',amenities:['CCTV','Security'],entry:'Demo entrance off the NH 48 service lane.',address:'NH 48 service lane near Ambience Mall, Gurugram'},
+  {id:'ambience-east',name:'Ambience East Parking',type:'Public lot',code:'M14',area:'Ambience Mall · East approach',lat:28.50429,lng:77.09751,car:7,bike:10,rate:55,bikeRate:20,rating:4.4,scene:'street',amenities:['CCTV','Well lit'],entry:'Use the demo open lot and look for the east side parking board.',address:'East approach, Ambience Mall area, Gurugram'},
+  {id:'mall-office',name:'North Arcade Visitor Bays',type:'Office',code:'M17',area:'NH 48 · Visitor ramp',lat:28.5061,lng:77.0954,car:4,bike:5,rate:70,bikeRate:30,rating:4.6,scene:'garage',amenities:['Covered','Security','EV charging'],entry:'Use the demo office visitor ramp beside the service road.',address:'Service road north of Ambience Mall, Gurugram'},
+  {id:'garden-court',name:'Garden Court Guest Parking',type:'Society',code:'M20',area:'Ambience area · Guest gate',lat:28.50204,lng:77.09811,car:3,bike:2,rate:45,bikeRate:20,rating:4.5,scene:'court',amenities:['Security','Well lit'],entry:'Use the demo residential guest gate by the guard kiosk.',address:'South-east of Ambience Mall, Gurugram'},
+  {id:'moulsari-deck',name:'Station Side Visitor Deck',type:'Office',code:'M04',area:'Moulsari Avenue · North entry',lat:28.49935,lng:77.09114,car:6,bike:6,rate:45,bikeRate:20,rating:4.6,scene:'deck',amenities:['Covered','Lift access','Security'],entry:'Follow the demo visitor ramp from the north part of the station road.',address:'North of Moulsari Avenue station, Gurugram'}
 ];
 
 export const durations = [30,60,90,120,180,240,360];
@@ -37,7 +41,7 @@ export const distanceText = metres => metres < 1000 ? metres + ' m' : (metres / 
 export function recommendations(query,state) {
   const dest = destinations.find(place => place.id === query.destination) ?? destinations[0];
   const close = parking.map(spot => ({...spot,dist:distance(dest,spot),price:totalFor(spot,query.vehicle,query.duration)}))
-    .filter(spot => capacity(spot,query.vehicle,state) && (!query.type || spot.type === query.type) && (!query.amenity || spot.amenities.includes(query.amenity)));
+    .filter(spot => spot.dist <= 900 && capacity(spot,query.vehicle,state) && (!query.type || spot.type === query.type) && (!query.amenity || spot.amenities.includes(query.amenity)));
   return close.sort((a,b) => {
     if (query.sort === 'price') return a.price - b.price || a.dist - b.dist;
     if (query.sort === 'rating') return b.rating - a.rating || a.dist - b.dist;

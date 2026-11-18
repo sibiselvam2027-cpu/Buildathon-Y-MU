@@ -1,7 +1,7 @@
 import {destinations,durations} from './parking.mjs';
 
 export const modelName = 'Xenova/all-MiniLM-L6-v2';
-const runtime = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2';
+const runtime = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
 let extractor;
 let reference;
 let modelState = 'idle';

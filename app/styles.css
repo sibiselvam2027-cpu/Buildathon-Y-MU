@@ -188,7 +188,7 @@ dialog.wide{width:min(800px,calc(100% - 28px))}
   .search-field{gap:7px;padding:5px 7px}.field-icon{width:28px;height:28px;border-radius:7px}.field-icon .icon{width:15px;height:15px}
   .search-submit{grid-column:1/-1;min-height:39px}.agent-strip{margin:7px 0 11px;padding:5px 8px}.agent-hint,.agent-separator{display:none}
   .explore-shell{height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto 1fr;grid-template-areas:"map" "heading" "results";border-radius:13px}
-  .map-panel{height:clamp(275px,48vh,395px);border-left:0;border-bottom:1px solid var(--line)}
+  .map-panel{height:clamp(275px,48vh,395px);border-left:0;border-bottom:1px solid var(--line)}.map-surface{touch-action:pan-y}
   .result-heading{padding:11px 11px 8px}.results{padding:0 10px 10px;overflow:visible}.map-key{gap:7px}.map-place,.map-key{left:8px}.map-controls{right:8px}
   .modal-wrap{padding:15px}.booking-banner{font-size:11px;padding:8px;gap:5px}
 }
