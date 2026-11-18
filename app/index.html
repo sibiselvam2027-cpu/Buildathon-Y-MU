@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f7f2">
+  <meta name="description" content="Find and reserve a parking spot around DLF Cyber City in the ParkEasy interactive demo.">
+  <title>ParkEasy | Parking before you arrive</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="top-inner">
+      <a class="brand" href="./" aria-label="ParkEasy home"><span class="brand-mark">P<i></i></span>Park<span>Easy</span></a>
+      <nav class="top-nav" aria-label="Main navigation">
+        <button class="nav-link selected" id="nav-explore"><span data-icon="map"></span><span>Explore</span></button>
+        <button class="nav-link" id="nav-sessions"><span data-icon="ticket"></span><span>My parking</span><i class="nav-dot" id="nav-dot" hidden></i></button>
+      </nav>
+      <button class="demo-button" id="demo-info"><i></i><span>Demo mode</span><span class="info-icon" data-icon="info"></span></button>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <section class="intro" aria-labelledby="main-title">
+      <p class="location-overline"><span data-icon="pin"></span> GURUGRAM, HARYANA</p>
+      <h1 id="main-title">Parking before <em>you arrive.</em></h1>
+      <p>See what’s open around DLF Cyber City and reserve your spot.</p>
+    </section>
+
+    <form id="search-form" class="search-bar" aria-label="Find parking">
+      <label class="search-field destination-field">
+        <span class="field-icon" data-icon="pin"></span>
+        <span class="field-body"><span class="field-label">Where to?</span><select id="destination" name="destination"></select></span>
+        <span class="field-arrow" data-icon="chevron"></span>
+      </label>
+      <fieldset class="search-field vehicle-field">
+        <legend class="sr-only">Vehicle</legend>
+        <span class="field-icon" data-icon="car"></span>
+        <div class="field-body"><span class="field-label">Vehicle</span><div class="vehicle-toggle"><label><input type="radio" name="vehicle" value="car" checked><span>Car</span></label><label><input type="radio" name="vehicle" value="bike"><span>Bike</span></label></div></div>
+      </fieldset>
+      <label class="search-field duration-field">
+        <span class="field-icon" data-icon="clock"></span>
+        <span class="field-body"><span class="field-label">Duration</span><select id="duration" name="duration"></select></span>
+        <span class="field-arrow" data-icon="chevron"></span>
+      </label>
+      <button class="primary search-submit" type="submit"><span data-icon="search"></span> Find parking</button>
+    </form>
+
+    <div class="agent-strip">
+      <span class="agent-icon" data-icon="sparkles"></span>
+      <span><strong>Ask ParkEasy</strong><span class="agent-separator"> · </span><span class="agent-hint">“A covered spot for my bike near CyberHub for 2 hours”</span></span>
+      <button id="open-agent" class="agent-open">Try assistant <span data-icon="arrow-right"></span></button>
+    </div>
+
+    <div id="booking-banner" class="booking-banner" hidden></div>
+
+    <section class="explore-shell" aria-label="Parking results and map">
+      <div class="result-heading">
+        <div class="result-kicker">PARKING NEAR <span id="result-area">DLF CYBERHUB</span></div>
+        <div class="result-title"><h2 id="result-count" aria-live="polite">Recommended spots</h2><label class="sort"><span class="sr-only">Sort spots</span><span data-icon="sort"></span><select id="sort"><option value="distance">Nearest</option><option value="price">Lowest price</option><option value="rating">Top rated</option></select><span data-icon="chevron"></span></label></div>
+        <div id="type-filters" class="type-filters" aria-label="Parking type"></div>
+        <div id="amenity-filter" hidden></div>
+      </div>
+      <section id="map" class="map-panel" aria-label="Bird’s-eye parking map of DLF Cyber City"></section>
+      <div id="results" class="results" aria-label="Recommended parking spaces"></div>
+    </section>
+    <footer class="page-footer"><span>ParkEasy <b>·</b> Gurugram pilot</span><button class="text-button" id="footer-info">What’s simulated?</button></footer>
+  </main>
+
+  <dialog id="dialog" aria-labelledby="modal-title"><div id="dialog-content"></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
