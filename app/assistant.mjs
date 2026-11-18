@@ -176,7 +176,7 @@ export async function interpretRequest(text) {
     const response=await fetch('/api/parking-intent',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      signal:AbortSignal.timeout(10000),
+      signal:AbortSignal.timeout(18000),
       body:JSON.stringify({text:String(text).slice(0,240)})
     });
     if (!response.ok) return result;

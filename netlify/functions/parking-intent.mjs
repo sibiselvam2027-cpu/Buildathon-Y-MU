@@ -57,7 +57,7 @@ export default async function parkingIntent(request) {
       method:'POST',
       headers:{'content-type':'application/json','x-goog-api-key':apiKey},
       redirect:'error',
-      signal:AbortSignal.timeout(7000),
+      signal:AbortSignal.timeout(16000),
       body:JSON.stringify({
         systemInstruction:{parts:[{text:prompt}]},
         contents:[{role:'user',parts:[{text:text.trim()}]}],
@@ -71,7 +71,13 @@ export default async function parkingIntent(request) {
         }
       })
     });
-    if (!response.ok) return json({error:'Gemini is temporarily unavailable.'},response.status===429?429:502);
+    if (!response.ok) {
+      console.warn('Gemini response status:',response.status);
+      return json({error:'Gemini is temporarily unavailable.'},response.status===429?429:502);
+    }
     return json({text:JSON.stringify(extractHints(await response.json()))});
-  } catch {return json({error:'Gemini is temporarily unavailable.'},502);}
+  } catch (error) {
+    console.warn('Gemini request result:',error instanceof DOMException && error.name==='TimeoutError'?'timeout':'failed');
+    return json({error:'Gemini is temporarily unavailable.'},502);
+  }
 }
