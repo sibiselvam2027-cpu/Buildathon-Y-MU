@@ -40,8 +40,15 @@ export const distanceText = metres => metres < 1000 ? metres + ' m' : (metres / 
 
 export function recommendations(query,state) {
   const dest = destinations.find(place => place.id === query.destination) ?? destinations[0];
+  const amenities=query.amenities?.length ? query.amenities : (query.amenity ? [query.amenity] : []);
   const close = parking.map(spot => ({...spot,dist:distance(dest,spot),price:totalFor(spot,query.vehicle,query.duration)}))
-    .filter(spot => spot.dist <= 900 && capacity(spot,query.vehicle,state) && (!query.type || spot.type === query.type) && (!query.amenity || spot.amenities.includes(query.amenity)));
+    .filter(spot => (
+      spot.dist <= 900 && capacity(spot,query.vehicle,state) &&
+      (!query.type || spot.type === query.type) &&
+      amenities.every(amenity => spot.amenities.includes(amenity)) &&
+      (query.maxPrice == null || spot.price <= query.maxPrice) &&
+      (query.maxHourlyPrice == null || rateFor(spot,query.vehicle) <= query.maxHourlyPrice)
+    ));
   return close.sort((a,b) => {
     if (query.sort === 'price') return a.price - b.price || a.dist - b.dist;
     if (query.sort === 'rating') return b.rating - a.rating || a.dist - b.dist;
@@ -49,7 +56,7 @@ export function recommendations(query,state) {
   }).slice(0,5);
 }
 
-export const initialQuery = {vehicle:'car',destination:'cyberhub',duration:120,type:'',amenity:'',sort:'distance'};
+export const initialQuery = {vehicle:'car',destination:'cyberhub',duration:120,type:'',amenity:'',amenities:[],maxPrice:null,maxHourlyPrice:null,sort:'distance'};
 export const initialState = () => ({query:{...initialQuery},bookings:[],reviewPending:null});
 export const storageKey = 'parkeasy-dlf-v1';
 
@@ -61,11 +68,12 @@ export function loadState(storage) {
   return initialState();
 }
 
-export function reserve(state, spot, time, id) {
-  const {vehicle,duration,destination} = state.query;
-  if (getBooking(state) || state.reviewPending || !capacity(spot,vehicle,state)) return null;
+export function reserve(state, spot, time, id, query=state.query) {
+  const {vehicle,duration,destination} = query;
+  if (getBooking(state) || !spot || !capacity(spot,vehicle,state)) return null;
   const booking = {id,spot:spot.id,vehicle,minutes:duration,destination,amount:totalFor(spot,vehicle,duration),created:time,status:'reserved'};
   state.bookings.unshift(booking);
+  state.reviewPending = null;
   return booking;
 }
 

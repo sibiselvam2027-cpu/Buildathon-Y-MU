@@ -30,9 +30,28 @@
     <section class="intro" aria-labelledby="main-title">
       <p class="location-overline"><span data-icon="pin"></span> DLF CYBER CITY, GURUGRAM</p>
       <h1 id="main-title">Parking before <em>you arrive<span>.</span></em></h1>
-      <p>Find an open spot near your destination and reserve it before you leave.</p>
+      <p>Tell ParkEasy where you’re headed. See the best spot and book it in one tap.</p>
     </section>
 
+    <section class="agent-hero" id="agent-hero" aria-labelledby="agent-heading">
+      <div class="agent-heading"><span class="agent-mark" data-icon="sparkles"></span><h2 id="agent-heading">Ask ParkEasy</h2></div>
+      <form class="agent-form" id="agent-form">
+        <label for="agent-query" class="sr-only">Describe the parking you need</label>
+        <div class="agent-entry">
+          <input type="text" id="agent-query" name="request" maxlength="240" autocomplete="off" enterkeyhint="search" placeholder="Where do you need parking?">
+          <button class="primary agent-submit" type="submit">Find my spot <span data-icon="arrow-right"></span></button>
+        </div>
+        <div class="agent-suggestion">
+          <button type="button" data-action="example" data-example="Covered bike parking near CyberHub for 2 hours">Covered bike at CyberHub <span data-icon="arrow-right"></span></button>
+          <button type="button" data-action="example" data-example="Cheapest car parking near Gateway Tower for 90 minutes">Budget car at Gateway <span data-icon="arrow-right"></span></button>
+        </div>
+      </form>
+      <p id="agent-feedback" class="agent-feedback" role="status" hidden></p>
+      <div id="agent-response" class="agent-response" aria-label="Parking recommendation" hidden></div>
+    </section>
+
+    <details class="manual-search">
+      <summary>Search with filters <span data-icon="chevron"></span></summary>
     <form id="search-form" class="search-bar" aria-label="Find parking">
       <label class="search-field destination-field">
         <span class="field-icon" data-icon="pin"></span>
@@ -51,12 +70,7 @@
       </label>
       <button class="primary search-submit" type="submit">Find parking <span data-icon="arrow-right"></span></button>
     </form>
-
-    <div class="agent-strip">
-      <span class="agent-icon" data-icon="sparkles"></span>
-      <span><strong>Ask ParkEasy</strong><span class="agent-hint">Search in your own words</span></span>
-      <button id="open-agent" class="agent-open">Try it <span data-icon="arrow-right"></span></button>
-    </div>
+    </details>
 
     <div id="booking-banner" class="booking-banner" hidden></div>
 

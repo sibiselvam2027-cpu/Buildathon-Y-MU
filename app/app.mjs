@@ -1,7 +1,7 @@
-import {destinations,parking,durations,durationText,rateFor,totalFor,getBooking,capacity,distance,distanceText,recommendations,loadState,storageKey,reserve,arrive,leave,review} from './parking.mjs';
+import {destinations,parking,durations,durationText,rateFor,totalFor,getBooking,capacity,distance,distanceText,recommendations,initialQuery,loadState,storageKey,reserve,arrive,leave,review} from './parking.mjs';
 import {parkingMap} from './map.mjs';
 import {mountPanorama} from './panorama.mjs';
-import {assistantStatus,interpretRequest,modelName,warmAssistant} from './assistant.mjs';
+import {interpretRequest} from './assistant.mjs';
 
 const icons = {
   pin:'<path d="M20 10c0 5-8 10-8 10s-8-5-8-10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
@@ -40,13 +40,25 @@ const directionsLink = (spot,vehicle) => 'https://www.google.com/maps/dir/?api=1
 const demoClock = booking => Date.now()+(booking.fastForwardMs??0);
 const studio = $('#dialog');
 const content = $('#dialog-content');
-let state = loadState(localStorage);
+const agentForm = $('#agent-form');
+const agentInput = $('#agent-query');
+let memoryState = null;
+let memoryOnly = false;
+const storage = {
+  getItem(key) {
+    if (memoryOnly) return memoryState;
+    try {return globalThis.localStorage.getItem(key) ?? memoryState;}
+    catch {return memoryState;}
+  }
+};
+let state = loadState(storage);
 let highlight = null;
 let mode = null;
 let cleanupPanorama = null;
 let toastTimer;
-let currentStars = 0;
 let alertedBooking = null;
+let agentOffer = null;
+let agentRequest = 0;
 
 document.querySelectorAll('[data-icon]').forEach(node=>{node.innerHTML=icon(node.dataset.icon);});
 $('#destination').innerHTML=destinations.map(place=>'<option value="'+place.id+'">'+place.name+'</option>').join('');
@@ -62,18 +74,38 @@ function syncControls() {
 }
 
 function save() {
-  try {localStorage.setItem(storageKey,JSON.stringify(state));}
-  catch {toast('This browser could not save the demo on this device.');}
+  memoryState=JSON.stringify(state);
+  if (memoryOnly) return;
+  try {globalThis.localStorage.setItem(storageKey,memoryState);}
+  catch {memoryOnly=true;}
 }
 
 async function changeBooking(edit) {
   const change=()=>{
-    state=loadState(localStorage);
+    state=loadState(storage);
     const result=edit(state);
     if (result) save();
     return result;
   };
-  return navigator.locks ? navigator.locks.request(storageKey,change) : change();
+  if (memoryOnly) return change();
+  let entered=false;
+  try {
+    const locks=globalThis.navigator?.locks;
+    if (locks) return await locks.request(storageKey,()=>{
+      entered=true;
+      return change();
+    });
+  } catch (error) {
+    if (entered) throw error;
+  }
+  return change();
+}
+
+function preferences(query) {
+  const labels=[...(query.amenities?.length ? query.amenities : (query.amenity ? [query.amenity] : []))];
+  if (query.maxPrice != null) labels.push('Up to '+amount(query.maxPrice)+' total');
+  if (query.maxHourlyPrice != null) labels.push('Up to '+amount(query.maxHourlyPrice)+'/hr');
+  return labels;
 }
 
 function render(fly=false) {
@@ -85,8 +117,9 @@ function render(fly=false) {
   $('#result-count').textContent=spotList.length ? spotList.length+' recommended spot'+(spotList.length===1?'':'s') : 'No matching spots';
   $('#map-status').textContent=query.vehicle==='bike' ? 'Bike availability' : 'Car availability';
   $('#type-filters').innerHTML=['','Public lot','Office','Society'].map(type=>'<button class="filter-pill'+(query.type===type?' active':'')+'" data-type="'+type+'" aria-pressed="'+(query.type===type)+'">'+(typeLabel[type]??'All spots')+'</button>').join('');
-  $('#amenity-filter').hidden=!query.amenity;
-  $('#amenity-filter').innerHTML=query.amenity ? '<button class="filter-pill active" data-action="clear-amenity">'+esc(query.amenity)+' '+icon('close')+'</button>' : '';
+  const applied=preferences(query);
+  $('#amenity-filter').hidden=!applied.length;
+  $('#amenity-filter').innerHTML=applied.length ? '<button class="filter-pill active" data-action="clear-amenity" aria-label="Clear amenity and price filters">'+esc(applied.join(' · '))+' '+icon('close')+'</button>' : '';
   $('#results').innerHTML=spotList.length ? spotList.map(spot=>card(spot,query,selectedId)).join('') : '<div class="empty"><strong>No available spots for these filters.</strong>Change the parking type, amenity or vehicle to see more options.</div>';
   map.set(dest,parking.map(spot=>({...spot,free:capacity(spot,query.vehicle,state)})),selectedId,fly,{reframe:false});
   renderSpotlight(selectedId,dest,spotList[0]?.id);
@@ -143,7 +176,7 @@ function spotDetails(spot) {
   const query=state.query;
   const free=capacity(spot,query.vehicle,state);
   const hold=getBooking(state);
-  const locked=Boolean(hold || state.reviewPending);
+  const locked=Boolean(hold);
   modal(spot.type+' · '+spot.area,spot.name,
     '<div class="detail-grid"><div><small>Distance</small><b>'+distanceText(distance(placeById(query.destination),spot))+'</b></div><div><small>'+durationText(query.duration)+'</small><b>'+amount(totalFor(spot,query.vehicle,query.duration))+'</b></div><div><small>Availability</small><b>'+(free?free+' open':'Full')+'</b></div></div><p><b>Address</b><br>'+spot.address+'</p><div class="note-box"><b>How to enter</b><br>'+spot.entry+'</div><div><b>Amenities</b><div class="amenities">'+spot.amenities.map(value=>'<span>'+value+'</span>').join('')+'</div></div><p class="modal-small">'+amount(rateFor(spot,query.vehicle))+'/hr · ★ '+spot.rating.toFixed(1)+' sample rating · Distance is straight-line.</p><div class="modal-actions"><button class="secondary" data-action="panorama" data-id="'+spot.id+'">'+icon('rotate')+' 360° preview</button><a class="secondary" href="'+directionsLink(spot,query.vehicle)+'" target="_blank" rel="noopener">'+icon('direction')+' Directions</a></div><div class="modal-actions">'+(locked?'<button class="primary" data-action="sessions">View my parking</button>':'<button class="primary" data-action="reserve" data-id="'+spot.id+'" '+(free?'':'disabled')+'>'+(free?'Reserve spot · '+amount(totalFor(spot,query.vehicle,query.duration)):'Unavailable for this vehicle')+'</button>')+'</div>');
 }
@@ -167,7 +200,8 @@ function sessionLink(booking,spot) {
 
 function showSessions() {
   const booking=getBooking(state);
-  if (state.reviewPending) {showReview();return;}
+  const pending=state.bookings.find(value=>value.id===state.reviewPending && value.status==='ended' && !value.review);
+  if (!booking && pending) {showReview(pending);return;}
   mode='sessions';
   if (!booking) {
     const past=state.bookings.filter(value=>value.status==='ended');
@@ -188,14 +222,42 @@ function showSessions() {
   }
 }
 
-function showReview() {
-  const booking=state.bookings.find(value=>value.id===state.reviewPending);
-  if (!booking) {showSessions();return;}
+function showReview(booking) {
   const spot=spotById(booking.spot);
   mode='review';
-  currentStars=0;
+  const choices=[1,2,3,4,5].map(value=>'<label><input type="radio" name="rating" value="'+value+'" aria-label="'+value+' star'+(value===1?'':'s')+'"><span aria-hidden="true">★</span></label>').join('');
   modal('Parking completed','How was your parking?',
-    '<p>Your vehicle is checked out of <b>'+spot.name+'</b>. Your rating helps the next driver know what to expect.</p><div class="rating" role="group" aria-label="Parking rating">'+[1,2,3,4,5].map(value=>'<button data-action="star" data-stars="'+value+'" aria-label="'+value+' star'+(value===1?'':'s')+'" aria-pressed="false">☆</button>').join('')+'</div><form id="review-form"><label class="modal-small" for="review-note">Anything to add? Optional</label><textarea id="review-note" class="modal-input" rows="2" maxlength="300" placeholder="How was the gate, lighting or availability?"></textarea><div class="modal-actions"><button id="review-submit" class="primary" type="submit" disabled>Submit review '+icon('arrow-right')+'</button></div></form>');
+    '<p>You’ve checked out of <b>'+spot.name+'</b>.</p><form id="review-form"><fieldset class="rating" aria-describedby="review-feedback"><legend class="modal-small">Rate this spot from 1 to 5 stars</legend>'+choices+'</fieldset><label class="modal-small" for="review-note">Add a comment (optional)</label><textarea id="review-note" name="note" class="modal-input" rows="2" maxlength="300" placeholder="How was the gate, lighting or availability?"></textarea><p id="review-feedback" class="review-feedback" role="alert" hidden></p><div class="modal-actions"><button id="review-submit" class="primary" type="submit">Submit review '+icon('arrow-right')+'</button><button class="text-button" type="button" data-action="close">Skip for now</button></div></form>');
+  const form=$('#review-form');
+  form.addEventListener('change',()=>{$('#review-feedback').hidden=true;});
+  form.addEventListener('submit',event=>submitReview(event,booking.id));
+}
+
+async function submitReview(event,id) {
+  event.preventDefault();
+  const form=event.currentTarget;
+  const data=new FormData(form);
+  const stars=Number(data.get('rating'));
+  const feedback=$('#review-feedback');
+  if (!stars) {
+    feedback.textContent='Choose a star rating to submit your review.';
+    feedback.hidden=false;
+    form.querySelector('[name="rating"]')?.focus();
+    return;
+  }
+  const button=$('#review-submit');
+  button.disabled=true;
+  let saved;
+  try {saved=await changeBooking(value=>review(value,id,stars,String(data.get('note')??'')));}
+  catch {
+    feedback.textContent='Couldn’t save the review. Please try again.';
+    feedback.hidden=false;
+    button.disabled=false;
+    return;
+  }
+  if (studio.open && mode==='review' && form.isConnected) studio.close();
+  render();
+  toast(saved?'Review saved. Thanks for parking with ParkEasy.':'This parking session no longer has a review to submit.');
 }
 
 function timerText(seconds) {
@@ -206,7 +268,7 @@ function timerText(seconds) {
 function tick() {
   const booking=getBooking(state);
   const banner=$('#booking-banner');
-  const ended=Boolean(state.reviewPending);
+  const ended=!booking && state.bookings.some(value=>value.id===state.reviewPending && value.status==='ended' && !value.review);
   const active=booking?.status==='active';
   const expired=active && demoClock(booking)>=booking.ends;
   $('#nav-dot').hidden=!booking && !ended;
@@ -234,20 +296,60 @@ function tick() {
   }
 }
 
-function showAssistant() {
-  mode='assistant';
-  modal('ParkEasy assistant','Tell us where you’re headed',
-    '<form class="agent-form" id="agent-form"><label for="agent-query" class="modal-small">Describe your vehicle, destination, duration or preferences.</label><input id="agent-query" class="modal-input" maxlength="240" required placeholder="Covered bike parking near CyberHub for 2 hours"><div class="agent-suggestion"><button type="button" data-action="example" data-example="Covered bike parking near CyberHub for 2 hours">Covered bike parking</button><button type="button" data-action="example" data-example="Affordable car parking near Gateway Tower for 90 minutes">Budget car parking</button></div><div id="agent-response" class="agent-response" aria-live="polite" hidden></div><button class="primary" type="submit">'+icon('sparkles')+' Find my matches</button><p class="modal-small" id="agent-model">Loading '+modelName+' in your browser…</p></form>');
-  $('#agent-query').focus();
-  warmAssistant().then(()=>{
-    const model=$('#agent-model');
-    if (!model) return;
-    model.textContent=assistantStatus()==='ready'?'Open-source model ready · '+modelName:'Quick matching available while model files are unavailable.';
-  });
+function agentFeedback(text='') {
+  const status=$('#agent-feedback');
+  status.textContent=text;
+  status.hidden=!text;
+}
+
+function clearAgentOffer() {
+  agentRequest++;
+  agentOffer=null;
+  $('#agent-response').hidden=true;
+  agentFeedback();
+}
+
+function renderAgentOffer(offer) {
+  const {spot,query,requestedDuration}=offer;
+  const panel=$('#agent-response');
+  const vehicle=query.vehicle==='bike' ? 'Bike' : 'Car';
+  const place=placeById(query.destination);
+  const bestLabel={price:'Lowest-price match',rating:'Highest-rated match',distance:'Closest match'}[query.sort];
+  const notes=preferences(query);
+  if (requestedDuration && requestedDuration!==query.duration) notes.push('Available duration is '+durationText(query.duration));
+  const held=getBooking(state);
+  panel.innerHTML='<p class="agent-result-label">'+bestLabel+'</p><h3 class="agent-result-title">'+spot.name+'</h3><p class="agent-result-details">'+vehicle+' · '+durationText(query.duration)+' · '+distanceText(spot.dist)+' straight-line from '+place.name+'</p>'+(notes.length?'<p class="agent-result-preferences">'+esc(notes.join(' · '))+'</p>':'')+'<div class="agent-result-actions"><button type="button" class="primary" data-action="'+(held?'sessions':'reserve')+'" data-id="'+spot.id+'" data-source="agent">'+(held?'View my parking':'Reserve · '+amount(spot.price))+' '+icon('arrow-right')+'</button><button type="button" class="secondary" data-action="panorama" data-id="'+spot.id+'" aria-label="360° preview of '+spot.name+'">'+icon('rotate')+' 360°</button></div>';
+  panel.hidden=false;
+}
+
+async function findAgentSpot(text) {
+  clearAgentOffer();
+  if (!text) {agentFeedback('Try “Car parking near CyberHub for 2 hours”.');agentInput.focus();return;}
+  const request=agentRequest;
+  agentFeedback('Finding your best spot…');
+  let intent;
+  try {intent=await interpretRequest(text);}
+  catch {intent={clarification:'Try a DLF landmark, vehicle and duration.'};}
+  if (request!==agentRequest) return;
+  if (intent.clarification || !Object.keys(intent.criteria??{}).length) {
+    agentFeedback(intent.clarification || 'Add a DLF destination, vehicle or duration.');
+    return;
+  }
+  const {vehicle,duration,destination}=state.query;
+  const query={...initialQuery,vehicle,duration,destination,...intent.criteria};
+  applyQuery(query,true);
+  const [spot]=recommendations(query,state);
+  if (!spot) {
+    agentFeedback('No spot matches this request near '+placeById(query.destination).name+'. Try a higher budget or fewer filters.');
+    return;
+  }
+  agentFeedback('Found a spot you can reserve.');
+  agentOffer={spot,query,requestedDuration:intent.requestedDuration};
+  renderAgentOffer(agentOffer);
 }
 
 function applyQuery(next,fly=false) {
-  state=loadState(localStorage);
+  state=loadState(storage);
   state.query={...state.query,...next};
   highlight=null;
   save();
@@ -258,54 +360,59 @@ function applyQuery(next,fly=false) {
 $('#search-form').addEventListener('submit',event=>{
   event.preventDefault();
   const data=new FormData(event.currentTarget);
-  applyQuery({destination:data.get('destination'),duration:Number(data.get('duration')),vehicle:data.get('vehicle')},true);
+  clearAgentOffer();
+  applyQuery({...initialQuery,destination:data.get('destination'),duration:Number(data.get('duration')),vehicle:data.get('vehicle')},true);
 });
-$('#sort').onchange=event=>applyQuery({sort:event.target.value});
+$('#sort').onchange=event=>{clearAgentOffer();applyQuery({sort:event.target.value});};
 $('#type-filters').onclick=event=>{
   const type=event.target.closest('[data-type]')?.dataset.type;
-  if (type!==undefined) applyQuery({type});
+  if (type!==undefined) {clearAgentOffer();applyQuery({type});}
 };
 $('#nav-explore').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
 $('#nav-sessions').onclick=showSessions;
 $('#demo-info').onclick=showDemo;
 $('#footer-info').onclick=showDemo;
-$('#open-agent').onclick=showAssistant;
-
-document.addEventListener('submit',async event=>{
-  if (event.target.id==='review-form') {
-    event.preventDefault();
-    const id=state.reviewPending;
-    const stars=currentStars;
-    const note=$('#review-note').value;
-    if (await changeBooking(value=>review(value,id,stars,note))) {
-      studio.close();
-      render();
-      toast('Review saved. Thanks for parking with ParkEasy.');
-    }
-  }
-  if (event.target.id==='agent-form') {
-    event.preventDefault();
-    const form=event.target;
-    const text=form.querySelector('input').value.trim();
-    if (!text) return;
-    const button=form.querySelector('[type=submit]');
-    const status=form.querySelector('#agent-response');
-    button.disabled=true;
-    status.hidden=false;
-    status.textContent='Matching your request to demo parking…';
-    const intent=await interpretRequest(text);
-    if (!studio.open || !form.isConnected) return;
-    if (!Object.keys(intent.criteria).length) {
-      status.textContent='Try adding a destination, vehicle, duration or a preference such as “covered”.';
-      button.disabled=false;
-      return;
-    }
-    applyQuery({type:'',amenity:'',sort:'distance',...intent.criteria},true);
-    studio.close();
-    const found=recommendations(state.query,state).length;
-    toast((intent.usedModel?'Assistant':'Quick match')+' · '+found+' '+(found===1?'spot':'spots')+' near '+placeById(state.query.destination).name);
-  }
+agentInput.addEventListener('input',clearAgentOffer);
+agentForm.addEventListener('submit',event=>{
+  event.preventDefault();
+  return findAgentSpot(agentInput.value.trim());
 });
+
+async function bookSpot(button,id) {
+  const fromAgent=button.dataset.source==='agent';
+  const quote=fromAgent ? agentOffer : null;
+  if (fromAgent && quote?.spot.id!==id) return;
+  const query={...(quote?.query ?? state.query)};
+  const code='PE'+globalThis.crypto.getRandomValues(new Uint32Array(1))[0].toString(36).toUpperCase().padStart(6,'0');
+  button.disabled=true;
+  let booking;
+  try {booking=await changeBooking(value=>reserve(value,spotById(id),Date.now(),code,query));}
+  catch {
+    button.disabled=false;
+    if (fromAgent) agentFeedback('Couldn’t book this spot. Try again.');
+    else toast('Couldn’t book this spot. Try again.');
+    return;
+  }
+  render();
+  if (booking) {
+    clearAgentOffer();
+    if (fromAgent) agentFeedback('Reserved. Find your booking under My parking.');
+    showSessions();
+    return;
+  }
+  if (fromAgent && agentOffer===quote) {
+    if (getBooking(state)) {
+      renderAgentOffer(quote);
+      agentFeedback('You already have a parking session.');
+    } else {
+      clearAgentOffer();
+      agentFeedback('That spot is no longer available. Find your next match.');
+    }
+  } else if (!fromAgent) {
+    spotDetails(spotById(id));
+    toast('This spot could not be reserved. Check availability or My parking.');
+  }
+}
 
 document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-action]');
@@ -323,26 +430,15 @@ document.addEventListener('click',async event=>{
       $('#map').scrollIntoView({block:'center',behavior});
     }
   }
-  if (action==='clear-amenity') applyQuery({amenity:''});
-  if (action==='example') {$('#agent-query').value=button.dataset.example;$('#agent-query').focus();}
-  if (action==='star') {
-    currentStars=Number(button.dataset.stars);
-    content.querySelectorAll('[data-stars]').forEach(star=>{
-      const value=Number(star.dataset.stars);
-      star.classList.toggle('filled',value<=currentStars);
-      star.textContent=value<=currentStars?'★':'☆';
-      star.setAttribute('aria-pressed',String(value===currentStars));
-    });
-    $('#review-submit').disabled=false;
+  if (action==='clear-amenity') {
+    clearAgentOffer();
+    applyQuery({amenity:'',amenities:[],maxPrice:null,maxHourlyPrice:null});
   }
-  if (action==='reserve') {
-    const code='PE'+crypto.getRandomValues(new Uint16Array(1))[0].toString(36).toUpperCase().padStart(4,'0');
-    button.disabled=true;
-    const booking=await changeBooking(value=>reserve(value,spotById(id),Date.now(),code));
-    render();
-    if (booking) showSessions();
-    else {spotDetails(spotById(id));toast('This spot could not be reserved. Check availability or My parking.');}
+  if (action==='example') {
+    agentInput.value=button.dataset.example;
+    await findAgentSpot(agentInput.value);
   }
+  if (action==='reserve') await bookSpot(button,id);
   if (action==='arrive') {
     button.disabled=true;
     if (await changeBooking(value=>arrive(value,id,Date.now()))) toast('Demo payment successful. Parking timer started.');
@@ -381,11 +477,11 @@ document.addEventListener('click',async event=>{
 });
 
 window.addEventListener('storage',event=>{
-  if (event.key!==storageKey) return;
-  state=loadState(localStorage);
+  if (event.key!==storageKey || memoryOnly) return;
+  state=loadState(storage);
   syncControls();
   render();
-  if (mode==='sessions' || mode==='review') showSessions();
+  if (mode==='sessions') showSessions();
 });
 syncControls();
 render();
