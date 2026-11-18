@@ -2,8 +2,21 @@ export const destinations = [
   {id:'cyberhub',name:'DLF CyberHub',sub:'DLF Cyber City, Gurugram',lat:28.495005,lng:77.088602,aliases:['cyber hub','cyberhub','cyber city','cybercity','dlf','gurgaon','gurugram']},
   {id:'gateway',name:'DLF Gateway Tower',sub:'Cyber City, Gurugram',lat:28.49451,lng:77.08675,aliases:['gateway tower','gateway','infinity tower']},
   {id:'moulsari',name:'Moulsari Avenue',sub:'DLF Phase 3, Gurugram',lat:28.49865,lng:77.09227,aliases:['moulsari','phase 3','phase iii','28 sector']},
-  {id:'ambience',name:'Ambience Mall',sub:'NH 48, Gurugram',lat:28.50402,lng:77.09616,aliases:['ambience mall','ambience','mall']}
+  {id:'ambience',name:'Ambience Mall',sub:'Ambience Island, Gurugram',lat:28.50420,lng:77.09695,aliases:['ambience mall','ambience island','ambience','ambiance mall','ambiance','ambient mall','ambient small','ambient']},
+  {id:'cyberpark',name:'DLF Cyber Park',sub:'Udyog Vihar, Sector 20',lat:28.50289,lng:77.08993,aliases:['dlf cyber park','dlf cyberpark','cyber park','cyberpark','dlf cyber park tower c']},
+  {id:'cds',name:'CDS Corporate Tower',sub:'Plot 390, Udyog Vihar Phase 3',lat:28.50499,lng:77.08791,aliases:['cds corporate tower','cds tower','cds building','cds','cds audi']},
+  {id:'capital',name:'Capital Building',sub:'Sector 20, near DLF Cyber Park',lat:28.50258,lng:77.09094,aliases:['capital building','capital tower','capital','capital 10th floor']},
+  {id:'building383',name:'383 Building',sub:'Plot 383, Udyog Vihar Phase 3',lat:28.50515,lng:77.08761,aliases:['383 building','building 383','plot 383','383','tetr college','tetr']},
+  {id:'wipro',name:'Wipro Building',sub:'Wipro GDC, Udyog Vihar Phase 3',lat:28.51030,lng:77.08849,aliases:['wipro building','wipro gdc','wipro campus','wipro']}
 ];
+
+const normalizedPlace = value => String(value).normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+
+export function resolveDestination(value) {
+  const requested=normalizedPlace(value);
+  if (!requested) return null;
+  return destinations.find(place=>[place.id,place.name,...place.aliases].some(alias=>normalizedPlace(alias)===requested)) ?? null;
+}
 
 export const parking = [
   {id:'ch-north',name:'CyberHub North Parking',type:'Public lot',code:'A01',area:'CyberHub · North entry',lat:28.49552,lng:77.08939,car:6,bike:9,rate:60,bikeRate:25,rating:4.8,scene:'open',amenities:['CCTV','Security','Well lit'],entry:'Demo entrance on the north service lane. Follow the green P signage to bay A01.',address:'CyberHub North service lane, DLF Cyber City, Gurugram'},
@@ -20,7 +33,13 @@ export const parking = [
   {id:'ambience-east',name:'Ambience East Parking',type:'Public lot',code:'M14',area:'Ambience Mall · East approach',lat:28.50429,lng:77.09751,car:7,bike:10,rate:55,bikeRate:20,rating:4.4,scene:'street',amenities:['CCTV','Well lit'],entry:'Use the demo open lot and look for the east side parking board.',address:'East approach, Ambience Mall area, Gurugram'},
   {id:'mall-office',name:'North Arcade Visitor Bays',type:'Office',code:'M17',area:'NH 48 · Visitor ramp',lat:28.5061,lng:77.0954,car:4,bike:5,rate:70,bikeRate:30,rating:4.6,scene:'garage',amenities:['Covered','Security','EV charging'],entry:'Use the demo office visitor ramp beside the service road.',address:'Service road north of Ambience Mall, Gurugram'},
   {id:'garden-court',name:'Garden Court Guest Parking',type:'Society',code:'M20',area:'Ambience area · Guest gate',lat:28.50204,lng:77.09811,car:3,bike:2,rate:45,bikeRate:20,rating:4.5,scene:'court',amenities:['Security','Well lit'],entry:'Use the demo residential guest gate by the guard kiosk.',address:'South-east of Ambience Mall, Gurugram'},
-  {id:'moulsari-deck',name:'Station Side Visitor Deck',type:'Office',code:'M04',area:'Moulsari Avenue · North entry',lat:28.49935,lng:77.09114,car:6,bike:6,rate:45,bikeRate:20,rating:4.6,scene:'deck',amenities:['Covered','Lift access','Security'],entry:'Follow the demo visitor ramp from the north part of the station road.',address:'North of Moulsari Avenue station, Gurugram'}
+  {id:'moulsari-deck',name:'Station Side Visitor Deck',type:'Office',code:'M04',area:'Moulsari Avenue · North entry',lat:28.49935,lng:77.09114,car:6,bike:6,rate:45,bikeRate:20,rating:4.6,scene:'deck',amenities:['Covered','Lift access','Security'],entry:'Follow the demo visitor ramp from the north part of the station road.',address:'North of Moulsari Avenue station, Gurugram'},
+  {id:'park-tower',name:'Cyber Park Visitor Deck',type:'Office',code:'P01',area:'DLF Cyber Park · Demo visitor gate',lat:28.50276,lng:77.08972,car:7,bike:8,rate:55,bikeRate:25,rating:4.7,scene:'deck',amenities:['Covered','CCTV','Lift access','Security'],entry:'Use the marked visitor ramp in the demo scene.',address:'Demo pin near DLF Cyber Park, Sector 20, Gurugram'},
+  {id:'cds-visitor',name:'CDS Visitor Bays',type:'Office',code:'P02',area:'CDS Corporate Tower · Demo ground level',lat:28.50529,lng:77.08800,car:6,bike:7,rate:45,bikeRate:20,rating:4.6,scene:'open',amenities:['CCTV','Security','Well lit'],entry:'Look for the marked turn-in and use the visitor bay in the demo.',address:'Demo pin near CDS Corporate Tower, Plot 390, Gurugram'},
+  {id:'capital-deck',name:'Capital Visitor Deck',type:'Office',code:'P03',area:'Capital Building · Demo ramp',lat:28.50258,lng:77.09120,car:4,bike:6,rate:60,bikeRate:25,rating:4.7,scene:'garage',amenities:['Covered','CCTV','Security'],entry:'The demo parking entrance is the ramp near the building approach.',address:'Demo pin near the Capital Building area, Sector 20, Gurugram'},
+  {id:'383-visitor',name:'Plot 383 Demo Parking',type:'Office',code:'P04',area:'Udyog Vihar Phase 3 · Demo guest bay',lat:28.50500,lng:77.08743,car:4,bike:8,rate:40,bikeRate:15,rating:4.4,scene:'court',amenities:['Covered','Well lit','Security'],entry:'Use the guest entrance marked in the demo scene.',address:'Demo pin in the CDS and Plot 383 area, Udyog Vihar, Gurugram'},
+  {id:'wipro-visitor',name:'Wipro Area Visitor Bays',type:'Office',code:'P05',area:'Wipro GDC area · Demo ground level',lat:28.51003,lng:77.08873,car:5,bike:7,rate:50,bikeRate:20,rating:4.6,scene:'open',amenities:['CCTV','Security','Wide bays'],entry:'Look for the visitor bay sign along the demo service lane.',address:'Demo pin near Wipro GDC, Udyog Vihar Phase 3, Gurugram'},
+  {id:'udyog-north',name:'Udyog Vihar North Demo Lot',type:'Public lot',code:'P06',area:'Udyog Vihar · Demo street level',lat:28.50786,lng:77.08902,car:6,bike:10,rate:35,bikeRate:15,rating:4.3,scene:'street',amenities:['CCTV','Well lit'],entry:'The open lot entrance is from the local service lane in the demo scene.',address:'Demo pin in the Udyog Vihar Phase 3 area, Gurugram'}
 ];
 
 export const durations = [30,60,90,120,180,240,360];

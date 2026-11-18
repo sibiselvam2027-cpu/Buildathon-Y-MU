@@ -38,25 +38,33 @@
       <form class="agent-form" id="agent-form">
         <label for="agent-query" class="sr-only">Describe the parking you need</label>
         <div class="agent-entry">
-          <input type="text" id="agent-query" name="request" maxlength="240" autocomplete="off" enterkeyhint="search" placeholder="Where do you need parking?">
+          <input type="text" id="agent-query" name="request" maxlength="240" autocomplete="off" enterkeyhint="search" placeholder="e.g. Bike near CDS for 2 hours">
           <button class="primary agent-submit" type="submit">Find my spot <span data-icon="arrow-right"></span></button>
         </div>
-        <div class="agent-suggestion">
-          <button type="button" data-action="example" data-example="Covered bike parking near CyberHub for 2 hours">Covered bike at CyberHub <span data-icon="arrow-right"></span></button>
-          <button type="button" data-action="example" data-example="Cheapest car parking near Gateway Tower for 90 minutes">Budget car at Gateway <span data-icon="arrow-right"></span></button>
+        <div class="agent-examples">
+          <p class="agent-examples-label">Try asking</p>
+          <div class="agent-suggestion">
+            <button type="button" data-action="example" data-example="Covered bike parking near CyberHub for 2 hours">Covered bike at CyberHub for 2 hr <span data-icon="arrow-right"></span></button>
+            <button type="button" data-action="example" data-example="Car parking near CDS Corporate Tower for 90 minutes">Car near CDS for 90 min <span data-icon="arrow-right"></span></button>
+            <button type="button" data-action="example" data-example="Cheapest car parking at Ambience Mall for 1 hour">Cheapest car spot at Ambience Mall <span data-icon="arrow-right"></span></button>
+          </div>
         </div>
       </form>
       <p id="agent-feedback" class="agent-feedback" role="status" hidden></p>
       <div id="agent-response" class="agent-response" aria-label="Parking recommendation" hidden></div>
+      <div class="agent-model-tools">
+        <button type="button" id="agent-model" data-action="enable-llm">Enable SmolLM2</button>
+        <span id="agent-model-status" role="status">Optional on-device LLM</span>
+      </div>
     </section>
 
-    <details class="manual-search">
-      <summary>Search with filters <span data-icon="chevron"></span></summary>
+    <section class="manual-search" aria-labelledby="manual-title">
+      <h2 id="manual-title">Search manually</h2>
     <form id="search-form" class="search-bar" aria-label="Find parking">
       <label class="search-field destination-field">
         <span class="field-icon" data-icon="pin"></span>
-        <span class="field-body"><span class="field-label">Where to?</span><select id="destination" name="destination"></select></span>
-        <span class="field-arrow" data-icon="chevron"></span>
+        <span class="field-body"><span class="field-label">DLF landmark</span><input type="text" id="destination" name="destination" list="destination-options" autocomplete="off" maxlength="100" placeholder="Type a DLF landmark"></span>
+        <datalist id="destination-options"></datalist>
       </label>
       <fieldset class="search-field vehicle-field">
         <legend class="sr-only">Vehicle</legend>
@@ -69,8 +77,9 @@
         <span class="field-arrow" data-icon="chevron"></span>
       </label>
       <button class="primary search-submit" type="submit">Find parking <span data-icon="arrow-right"></span></button>
+      <p id="manual-feedback" role="alert" hidden></p>
     </form>
-    </details>
+    </section>
 
     <div id="booking-banner" class="booking-banner" hidden></div>
 
@@ -101,11 +110,17 @@
           <div class="forest-metrics">
             <div><span>Time parked</span><strong id="forest-minutes">0 min</strong></div>
             <div><span>Trees grown</span><strong id="forest-trees">0</strong></div>
-            <div><span>Next tree</span><strong id="forest-percent">0%</strong></div>
+            <div><span id="forest-meter-label">Next tree</span><strong id="forest-percent">0%</strong></div>
           </div>
           <progress id="forest-growth" class="forest-growth" value="0" max="100" aria-label="Progress toward your next tree"></progress>
           <div class="forest-caption"><p id="forest-note">Every 2 hours parked grows a tree in your forest.</p><button type="button" id="forest-advance" class="text-button" data-action="forest-simulate" hidden>Demo · Add 30 min</button></div>
         </div>
+        </div>
+        <div class="forest-level-scale">
+          <div class="forest-level-heading"><label for="forest-level">Forest level preview</label><output for="forest-level" id="forest-level-status">Level 0 · 0 trees</output></div>
+          <input type="range" id="forest-level" min="0" max="15" step="1" value="0" aria-describedby="forest-level-status">
+          <div class="forest-level-ticks" aria-hidden="true"><span>0</span><span>5</span><span>10</span><span>15</span></div>
+          <button type="button" id="forest-level-reset" data-action="forest-preview-reset" hidden>Back to live forest</button>
         </div>
       </section>
     </section>

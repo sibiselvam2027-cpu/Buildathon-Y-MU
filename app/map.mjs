@@ -385,7 +385,9 @@ function sketch(canvas,w,h,local,zoom) {
   }
   const labels = [
     ['DLF CYBER CITY',28.49425,77.0854],['CyberHub',28.49462,77.08876],['DLF PHASE 3',28.4951,77.0943],
-    ['NH 48',28.49822,77.0899],['Moulsari Avenue',28.4992,77.09245],['Ambience Mall',28.50425,77.09615]
+    ['NH 48',28.49822,77.0899],['Moulsari Avenue',28.4992,77.09245],['Ambience Mall',28.50467,77.0971],
+    ['DLF Cyber Park',28.50228,77.08935],['CDS / Plot 383',28.50555,77.08763],
+    ['Capital Building',28.5020,77.09194],['Wipro GDC',28.51074,77.0889]
   ];
   ctx.textAlign='center';
   for (const [label,lat,lng] of labels) {

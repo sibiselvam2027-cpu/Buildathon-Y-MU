@@ -1,8 +1,8 @@
-import {destinations,parking,durations,durationText,rateFor,totalFor,getBooking,capacity,distance,distanceText,recommendations,initialQuery,loadState,storageKey,reserve,arrive,leave} from './parking.mjs';
+import {destinations,parking,durations,durationText,rateFor,totalFor,getBooking,capacity,distance,distanceText,recommendations,resolveDestination,initialQuery,loadState,storageKey,reserve,arrive,leave} from './parking.mjs';
 import {parkingMap} from './map.mjs';
 import {mountPanorama} from './panorama.mjs';
-import {interpretRequest} from './assistant.mjs';
-import {forestProgress,treeMinutes} from './forest-growth.mjs';
+import {interpretRequest,warmAssistant} from './assistant.mjs';
+import {forestProgress,forestLevelMax,treeMinutes} from './forest-growth.mjs';
 import {mountForest} from './forest-scene.mjs';
 
 const icons = {
@@ -45,6 +45,7 @@ const studio = $('#dialog');
 const content = $('#dialog-content');
 const agentForm = $('#agent-form');
 const agentInput = $('#agent-query');
+const forestLevel = $('#forest-level');
 let memoryState = null;
 let memoryOnly = false;
 const storage = {
@@ -63,30 +64,45 @@ let alertedBooking = null;
 let agentOffer = null;
 let agentRequest = 0;
 let forestStamp = '';
+let previewLevel = null;
 
 document.querySelectorAll('[data-icon]').forEach(node=>{node.innerHTML=icon(node.dataset.icon);});
-$('#destination').innerHTML=destinations.map(place=>'<option value="'+place.id+'">'+place.name+'</option>').join('');
+$('#destination-options').innerHTML=destinations.map(place=>'<option value="'+esc(place.name)+'">'+esc(place.sub)+'</option>').join('');
 $('#duration').innerHTML=durations.map(minutes=>'<option value="'+minutes+'">'+durationText(minutes)+'</option>').join('');
 const map = parkingMap($('#map'),icon,selectPin);
 const forest = mountForest($('#forest-scene'));
+forestLevel.max=String(forestLevelMax);
+forestLevel.addEventListener('input',()=>{
+  previewLevel=Math.max(0,Math.min(forestLevelMax,Number(forestLevel.value)));
+  renderForest();
+});
 
 function renderForest() {
   const growth=forestProgress(state.bookings);
-  const stamp=[growth.minutes,growth.active,growth.vehicle].join(':');
+  const stamp=[growth.minutes,growth.active,growth.vehicle,previewLevel].join(':');
   if (stamp===forestStamp) return;
   forestStamp=stamp;
+  const previewing=previewLevel!==null;
+  const level=previewing ? previewLevel : growth.trees;
+  const complete=growth.trees===forestLevelMax;
+  const label='Level '+level+' · '+level+' '+(level===1?'tree':'trees');
   $('#forest-minutes').textContent=durationText(growth.minutes);
   $('#forest-trees').textContent=String(growth.trees);
   $('#forest-percent').textContent=growth.progress+'%';
+  $('#forest-meter-label').textContent=complete?'Forest complete':'Next tree';
   $('#forest-growth').value=growth.progress;
-  $('#forest-note').textContent=growth.minutes===0 ? 'Every '+durationText(treeMinutes)+' parked grows a tree.' : durationText(growth.minutesToNext)+' of parked time to your next tree.';
-  $('#forest-advance').hidden=!growth.active;
-  forest.update(growth);
+  $('#forest-note').textContent=complete ? 'All '+forestLevelMax+' trees grown.' : growth.minutes===0 ? 'Every '+durationText(treeMinutes)+' parked grows a tree.' : durationText(growth.minutesToNext)+' of parked time to your next tree.';
+  $('#forest-advance').hidden=!growth.active || complete;
+  forestLevel.value=String(level);
+  forestLevel.setAttribute('aria-valuetext',label);
+  $('#forest-level-status').textContent=(previewing?'Preview · ':'')+label;
+  $('#forest-level-reset').hidden=!previewing;
+  forest.update({...growth,trees:level,progress:previewing?0:growth.progress,preview:previewing});
 }
 
 function syncControls() {
   const {destination,vehicle,duration,sort}=state.query;
-  $('#destination').value=destination;
+  $('#destination').value=(placeById(destination)??destinations[0]).name;
   $('#duration').value=duration;
   $('#sort').value=sort;
   document.querySelectorAll('[name=vehicle]').forEach(radio=>{radio.checked=radio.value===vehicle;});
@@ -329,7 +345,7 @@ async function findAgentSpot(text) {
     agentFeedback('No spot matches this request near '+placeById(query.destination).name+'. Try a higher budget or fewer filters.');
     return;
   }
-  agentFeedback('Found a spot you can reserve.');
+  agentFeedback(intent.usedModel?'Matched with SmolLM2.':'Found a spot you can reserve.');
   agentOffer={spot,query,requestedDuration:intent.requestedDuration};
   renderAgentOffer(agentOffer);
 }
@@ -346,9 +362,19 @@ function applyQuery(next,fly=false) {
 $('#search-form').addEventListener('submit',event=>{
   event.preventDefault();
   const data=new FormData(event.currentTarget);
+  const destination=resolveDestination(data.get('destination')??'');
+  const feedback=$('#manual-feedback');
+  if (!destination) {
+    feedback.textContent='Location outside the DLF demo list. Try CDS, DLF Cyber Park, Capital Building, 383 Building, Wipro or Ambience Mall.';
+    feedback.hidden=false;
+    $('#destination').focus();
+    return;
+  }
+  feedback.hidden=true;
   clearAgentOffer();
-  applyQuery({...initialQuery,destination:data.get('destination'),duration:Number(data.get('duration')),vehicle:data.get('vehicle')},true);
+  applyQuery({...initialQuery,destination:destination.id,duration:Number(data.get('duration')),vehicle:data.get('vehicle')},true);
 });
+$('#destination').addEventListener('input',()=>{$('#manual-feedback').hidden=true;});
 $('#sort').onchange=event=>{clearAgentOffer();applyQuery({sort:event.target.value});};
 $('#type-filters').onclick=event=>{
   const type=event.target.closest('[data-type]')?.dataset.type;
@@ -363,6 +389,22 @@ agentForm.addEventListener('submit',event=>{
   event.preventDefault();
   return findAgentSpot(agentInput.value.trim());
 });
+
+async function enableLanguageModel(button) {
+  const status=$('#agent-model-status');
+  status.textContent='Downloading the model. Search still works.';
+  button.disabled=true;
+  try {
+    if (await warmAssistant()) {
+      status.textContent='SmolLM2 ready on this device.';
+      button.textContent='SmolLM2 enabled';
+      return;
+    }
+  } catch {}
+  status.textContent='Model unavailable. Local matching is ready.';
+  button.textContent='Retry SmolLM2';
+  button.disabled=false;
+}
 
 async function bookSpot(button,id) {
   const fromAgent=button.dataset.source==='agent';
@@ -419,6 +461,11 @@ document.addEventListener('click',async event=>{
     $('#forest-view').scrollIntoView({block:'nearest',behavior});
   }
   if (action==='forest-rotate') forest.rotate();
+  if (action==='forest-preview-reset') {
+    previewLevel=null;
+    renderForest();
+    forestLevel.focus();
+  }
   if (action==='forest-simulate') {
     button.disabled=true;
     try {
@@ -447,6 +494,7 @@ document.addEventListener('click',async event=>{
     agentInput.value=button.dataset.example;
     await findAgentSpot(agentInput.value);
   }
+  if (action==='enable-llm') await enableLanguageModel(button);
   if (action==='reserve') await bookSpot(button,id);
   if (action==='arrive') {
     button.disabled=true;

@@ -1,54 +1,78 @@
 import {destinations,durations} from './parking.mjs';
 
-export const modelName = 'Xenova/all-MiniLM-L6-v2';
+export const modelName = 'HuggingFaceTB/SmolLM2-135M-Instruct';
 const runtime = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
-let extractor;
-let reference;
+let modelWorker;
 let modelState = 'idle';
 let warming;
-
-const intents = [
-  ['sort','price','Keep the price down, I am on a tight budget, show inexpensive parking'],
-  ['sort','rating','I want the most highly rated parking with excellent visitor reviews'],
-  ['sort','distance','I want a very short walk, pick the spot nearest my destination'],
-  ['amenity','Covered','Find a sheltered parking space away from direct sunlight and rain'],
-  ['amenity','Security','Find a staffed parking spot with a guard on duty'],
-  ['amenity','CCTV','Find a monitored parking space using video surveillance cameras'],
-  ['amenity','EV charging','I want a plug to charge my electric vehicle while it is parked'],
-  ['amenity','Wide bays','I need a spacious parking bay for a large vehicle'],
-  ['amenity','Well lit','Find bright parking with good visibility at night'],
-  ['amenity','Lift access','I need an elevator to get from parking to the lobby'],
-  ['type','Office','I want to park in a commercial office building visitor car park'],
-  ['type','Society','I want parking inside a residential apartment community or housing complex'],
-  ['type','Public lot','I want an open parking lot that is open to the public'],
-  ['vehicle','car','I am driving my car, hatchback, sedan or sports utility vehicle'],
-  ['vehicle','bike','I am riding a scooter, motorcycle or another two-wheeler'],
-  ['destination','cyberhub','I am going to DLF CyberHub, the restaurant and shopping plaza in Cyber City'],
-  ['destination','gateway','I am going to DLF Gateway Tower in Cyber City'],
-  ['destination','moulsari','I am headed to the Moulsari Avenue rapid metro station in DLF Phase 3'],
-  ['destination','ambience','I want to visit Ambience Mall, the mall on the highway in Gurugram']
-];
+let inference;
 
 export const assistantStatus = () => modelState;
 
-export function warmAssistant() {
-  if (warming) return warming;
-  modelState = 'loading';
-  warming = import(runtime).then(async ({pipeline,env}) => {
+// The standalone and hosted builds both use a worker so model downloads and inference leave the UI responsive.
+async function runModelWorker(runtimeUrl,modelId) {
+  try {
+    const {pipeline,env} = await import(runtimeUrl);
     env.allowLocalModels = false;
     const wasm = env.backends?.onnx?.wasm;
     if (wasm) {
       wasm.numThreads = 1;
       wasm.proxy = false;
     }
-    extractor = await pipeline('feature-extraction',modelName,{device:'wasm',dtype:'q8'});
-    const samples = await extractor(intents.map(intent=>intent[2]),{pooling:'mean',normalize:true});
-    reference = samples.tolist();
-    modelState = 'ready';
-    return true;
-  }).catch(()=>{
-    modelState = 'unavailable';
-    return false;
+    const generate = await pipeline('text-generation',modelId,{device:'wasm',dtype:'q8'});
+    self.onmessage = async ({data}) => {
+      try {
+        const result = await generate([
+          {role:'system',content:data.prompt},
+          {role:'user',content:data.text}
+        ],{max_new_tokens:80,do_sample:false,return_full_text:false});
+        const output = result[0]?.generated_text;
+        self.postMessage({type:'result',text:typeof output==='string'?output:output?.at(-1)?.content});
+      } catch {
+        self.postMessage({type:'result'});
+      }
+    };
+    self.postMessage({type:'ready'});
+  } catch {
+    self.postMessage({type:'unavailable'});
+  }
+}
+
+export function warmAssistant() {
+  if (warming && modelState!=='unavailable') return warming;
+  modelState = 'loading';
+  warming = new Promise(resolve=>{
+    let timeout;
+    let url;
+    const releaseUrl = ()=>{if (url) URL.revokeObjectURL(url);};
+    const unavailable = ()=>{
+      clearTimeout(timeout);
+      releaseUrl();
+      modelWorker?.terminate();
+      modelWorker = undefined;
+      modelState = 'unavailable';
+      inference?.();
+      inference = undefined;
+      resolve(false);
+    };
+    try {
+      const code = '('+runModelWorker.toString()+')('+JSON.stringify(runtime)+','+JSON.stringify(modelName)+');';
+      url = URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
+      modelWorker = new Worker(url,{type:'module'});
+      timeout = setTimeout(unavailable,120_000);
+      modelWorker.onerror = unavailable;
+      modelWorker.onmessage = ({data})=>{
+        if (data.type==='ready') {
+          clearTimeout(timeout);
+          releaseUrl();
+          modelState = 'ready';
+          resolve(true);
+        } else if (data.type==='result') {
+          inference?.(data.text);
+          inference = undefined;
+        } else if (data.type==='unavailable') unavailable();
+      };
+    } catch {unavailable();}
   });
   return warming;
 }
@@ -66,13 +90,24 @@ const extraAliases = {
   cyberhub:['cyber hub plaza','cybr hub','cyber hubb','cyberhub metro'],
   gateway:['dlf gateway','infinity towers'],
   moulsari:['moulsari metro','moulsari av','maulsari','dlf phase three'],
-  ambience:['ambiance mall','ambiance']
+  ambience:['ambiance mall','ambiance','ambient mall','ambient small','ambience small']
 };
-const placePatterns = destinations.flatMap(({id,aliases})=>[...aliases,...extraAliases[id]]
-  .filter(alias=>!broadAreas.has(alias))
-  .map(alias=>({id,alias,pattern:new RegExp('\\b'+alias+'\\b')})))
+const placePatterns = destinations.flatMap(({id,name,aliases})=>[name,...(aliases??[]),...(extraAliases[id]??[])]
+  .map(normalizeRequest)
+  .filter(alias=>alias && !broadAreas.has(alias))
+  .map(alias=>{
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const pattern = /^\d+$/.test(alias)
+      ? new RegExp('(?:^'+escaped+'$|\\b(?:near|at|around|to)\\s+'+escaped+'\\b)')
+      : new RegExp('\\b'+escaped+'\\b');
+    return {id,alias,pattern};
+  }))
   .sort((a,b)=>b.alias.length-a.alias.length);
-const supportedPlaces = 'Choose CyberHub, Gateway Tower, Moulsari Avenue or Ambience Mall.';
+const supportedPlaces = 'Try CyberHub or Ambience Mall, or choose a DLF landmark below.';
+const unknownPlace = 'I couldn\'t match that location in the DLF pilot. '+supportedPlaces;
+const outsideQualifiers = '(?:vasant kunj|new delhi|delhi(?!\\s+(?:ncr|gurgaon|gurugram|jaipur)\\b)|noida|greater noida|faridabad|ghaziabad|dwarka|aerocity|bengaluru|bangalore)';
+const outsideAfterLandmark = new RegExp('^[\\s,(]+(?:(?:in|at|near)\\s+(?:the\\s+)?)?'+outsideQualifiers+'\\b');
+const outsideBeforeLandmark = new RegExp('\\b'+outsideQualifiers+"(?:['’]s)?[\\s,(]+$");
 const amenityPatterns = [
   ['EV charging',/\b(ev charg\w*|charg(?:e|er|ing)|electric vehicle)\b/],
   ['Covered',/\b(covered|shade|shaded|shelter(?:ed)?|indoors?|rain|basement|chhaon)\b/],
@@ -82,6 +117,15 @@ const amenityPatterns = [
   ['Well lit',/\b(well lit|bright|lighting|lights)\b/],
   ['Lift access',/\b(lift|elevator)\b/]
 ];
+const amenityNames = new Set(amenityPatterns.map(([name])=>name));
+
+function namesUnknownPlace(query) {
+  if (/\b(?:sector\s*\d+|phase\s*(?:[1245]|\bi\b|\bii\b|\biv\b|\bv\b)|airport|noida|delhi|huda city|golf course|sohna|connaught place|iffco chowk|mg road|aerocity)\b/.test(query)) return true;
+  const withoutArea = query.replace(/\b(?:dlf|gurgaon|gurugram)\b(?:\s+(?:area|region|district)\b)?/g,' ').replace(/\s+/g,' ');
+  const requestedPlace = withoutArea.match(/\b(?:near(?: to)?|around|at|in|outside|opposite|beside|head(?:ing)? to|go(?:ing)? to|destination(?: is)?)\s+(?:(?:a|an|the)\s+)?([a-z][a-z\d ]*)/);
+  if (requestedPlace && !/^(?:my car|my bike|my scooter|most|least|under|shade|security|cctv|case|advance|open|covered|cheap|public|paid|parking|basement|garage|lot|for|with|\d+)\b/.test(requestedPlace[1])) return true;
+  return /\b(?:[a-z\d]+\s+)?(?:tower|building|mall|metro|plaza)\b/.test(withoutArea) || /\b\w+\s+ke paas\b/.test(withoutArea);
+}
 
 function normalizeRequest(text) {
   return String(text ?? '').normalize('NFKC').toLowerCase()
@@ -125,24 +169,26 @@ function readRequest(text) {
   if (bike && car) return clarify('Are you parking a car or a motorbike?');
   if (bike || car) criteria.vehicle = bike?'bike':'car';
 
+  if (/\b(?:overnight|full day|whole day|all day|tomorrow|tonight|next week|this weekend)\b|\b\d+\s*days?\b|\b(?:on|next|this)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(?:at|from|until)\s+\d+(?::\d{2}\s*(?:am|pm)?|\s*(?:am|pm))\b/.test(query)) {
+    return clarify('The demo reserves parking for right now, for 30 minutes to 6 hours.');
+  }
+
   const destination = placePatterns.find(({pattern})=>pattern.test(query));
   if (destination) {
+    const match = query.match(destination.pattern);
+    if (outsideAfterLandmark.test(query.slice(match.index+match[0].length)) || outsideBeforeLandmark.test(query.slice(0,match.index))) {
+      return clarify(unknownPlace);
+    }
     const uniqueAlternatives = query.split(/\bor\b/).map(part=>placePatterns.find(({pattern})=>pattern.test(part))?.id).filter(Boolean);
     if (new Set(uniqueAlternatives).size>1) return clarify('Which destination are you heading to? '+supportedPlaces);
     criteria.destination = destination.id;
   } else if (/\b(near me|my current location|my location|nearby me)\b/.test(query)) {
     return clarify('Tell me which landmark is closest to you. '+supportedPlaces);
   } else {
-    const localArea = /\b(dlf|gurgaon|gurugram)\b/.test(query);
-    const unsupportedArea = /\b(?:sector\s*\d+|phase\s*(?:[1245]|\bi\b|\bii\b|\biv\b|\bv\b)|airport|noida|delhi|huda city|golf course|sohna|connaught place|iffco chowk|mg road|aerocity)\b/.test(query);
-    const locationCue = /\b(?:near(?: to)?|around|at|in|outside|opposite|beside|head(?:ing)? to|go(?:ing)? to|destination(?: is)?)\s+(?!(?:my|a|an|the)\s+(?:car|bike|scooter|open|covered|hour)\b)([a-z][a-z\d ]{2,})/.test(query);
-    if (unsupportedArea || (locationCue && !localArea)) return clarify('I couldn’t match that location in the DLF pilot. '+supportedPlaces);
-    if (localArea) criteria.destination = 'cyberhub';
+    if (namesUnknownPlace(query)) return clarify(unknownPlace);
+    if (/\b(dlf|gurgaon|gurugram)\b/.test(query)) criteria.destination = 'cyberhub';
   }
 
-  if (/\b(?:overnight|full day|whole day|all day|tomorrow|tonight|next week|this weekend)\b|\b\d+\s*days?\b|\b(?:on|next|this)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(?:at|from|until)\s+\d+(?::\d{2}\s*(?:am|pm)?|\s*(?:am|pm))\b/.test(query)) {
-    return clarify('The demo reserves parking for right now, for 30 minutes to 6 hours.');
-  }
   const requestedDuration = readDuration(query);
   if (requestedDuration!==null) {
     result.requestedDuration = requestedDuration;
@@ -171,28 +217,53 @@ function readRequest(text) {
 
 export const parseRequest = text => readRequest(text).criteria;
 
+const modelPrompt = 'Extract parking preferences from the user request. Return one JSON object only. '+
+  'Include only stated preferences. Allowed keys: vehicle (car or bike), minutes (1 to 360), sort (price, rating or distance), '+
+  'amenity (Covered, Security, CCTV, EV charging, Wide bays, Well lit or Lift access), type (Office, Society or Public lot). Omit absent fields.';
+
+function mergeModelIntent(result,text) {
+  const json = text?.match(/\{[^{}]*\}/)?.[0];
+  if (!json) return result;
+  let candidate;
+  try {candidate=JSON.parse(json);} catch {return result;}
+  const criteria = {...result.criteria};
+  let added = false;
+  const choices = {
+    vehicle: new Set(['car','bike']),
+    sort: new Set(['price','rating','distance']),
+    amenity: amenityNames,
+    type: new Set(['Office','Society','Public lot'])
+  };
+  for (const [key,allowed] of Object.entries(choices)) {
+    if (!Object.hasOwn(criteria,key) && allowed.has(candidate[key])) {
+      criteria[key] = candidate[key];
+      added = true;
+    }
+  }
+  let requestedDuration = result.requestedDuration;
+  if (!criteria.duration && Number.isInteger(candidate.minutes) && candidate.minutes>0 && candidate.minutes<=durations.at(-1)) {
+    requestedDuration = candidate.minutes;
+    criteria.duration = durations.find(value=>value>=requestedDuration);
+    added = true;
+  }
+  return added ? {...result,criteria,requestedDuration,usedModel:true} : result;
+}
+
 export async function interpretRequest(text) {
   const result = readRequest(text);
-  if (result.clarification) return result;
-  if (modelState!=='ready') {
-    void warmAssistant();
-    return result;
-  }
+  if (result.clarification || modelState!=='ready' || inference) return result;
 
-  // An interpretation must never hold up a driver while a model is loading or busy.
   let timeout;
-  const cutoff = new Promise(resolve=>{timeout=setTimeout(()=>resolve(result),180);});
-  const embedding = Promise.resolve().then(()=>extractor(text,{pooling:'mean',normalize:true})).then(output=>{
-    const vector=output.tolist()[0];
-    const suggestions = reference.map((row,index)=>({intent:intents[index],score:row.reduce((sum,number,i)=>sum+number*vector[i],0)})).sort((a,b)=>b.score-a.score);
-    const [first,second]=suggestions;
-    if (first && first.score>.52 && first.score-(second?.score ?? 0)>.06) {
-      const [field,value]=first.intent;
-      if (['sort','amenity','type'].includes(field) && !Object.hasOwn(result.criteria,field)) return {...result,usedModel:true,criteria:{...result.criteria,[field]:value}};
+  const cutoff = new Promise(resolve=>{timeout=setTimeout(resolve,3_000);});
+  const prediction = new Promise(resolve=>{
+    inference = resolve;
+    try {modelWorker.postMessage({prompt:modelPrompt,text:String(text).slice(0,400)});}
+    catch {
+      inference = undefined;
+      resolve();
     }
-    return result;
-  }).catch(()=>result);
-  const match=await Promise.race([embedding,cutoff]);
+  });
+  const output = await Promise.race([prediction,cutoff]);
   clearTimeout(timeout);
-  return match;
+  return mergeModelIntent(result,output);
 }

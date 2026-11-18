@@ -1,3 +1,5 @@
+import {forestLevelMax} from './forest-growth.mjs';
+
 const colors = {
   soil:'#946c54', soilShade:'#765644', lightSoil:'#b58e70',
   grass:'#86aa55', moss:'#76964b', fresh:'#9cbb60', shadow:'#5c743e',
@@ -7,8 +9,10 @@ const colors = {
   leaf:'#66923e', bright:'#8eaf54', tip:'#b3ca69', pine:'#497451'
 };
 
-const plots = [[11.1,2],[13.55,2],[15.95,2],[11.1,4.55],[13.55,4.55],[15.95,4.55],
-  [11.1,7.1],[13.55,7.1],[15.95,7.1],[11.1,9.65],[13.55,9.65],[15.95,9.65]];
+const columnX=[11.1,13.55,15.95];
+const plots=Array.from({length:forestLevelMax},(_,index)=>[
+  columnX[index%columnX.length],1.65+Math.floor(index/columnX.length)*1.87
+]);
 
 const forestClamp = (value,min,max) => Math.min(max,Math.max(min,value));
 const brightnessCache = new Map();
@@ -168,7 +172,7 @@ function makeGeometry(camera,growth,active,vehicle) {
   block(.58,.64,3.84,8.41,5.91,.11,colors.asphalt);
   block(.59,.64,3.88,8.39,1.41,.29,colors.moss);
   tile(.66,.72,4.171,8.18,1.24,colors.grass,.013);
-  for (const [x,y,size] of [[1.48,1.34,.65],[3.08,1.28,.58],[7.61,1.34,.69]]) tree(x,y,4.172,size,0);
+  for (const [x,y,size] of [[1.48,1.34,1.38],[3.08,1.28,1.14],[7.61,1.34,1.46]]) shrub(x,y,4.172,size);
   shrub(4.40,1.18,4.176,.80);
   shrub(6.5,1.51,4.176,.74);
   block(.55,.58,3.90,8.49,.16,.39,colors.cream);
@@ -331,13 +335,18 @@ export function mountForest(host) {
   draw();
   return {
     update(next) {
-      const nextGrowth=forestClamp(Number(next.trees)||0,0,plots.length)+forestClamp(Number(next.progress)||0,0,100)/100;
+      const trees=forestClamp(Math.floor(Number(next.trees)||0),0,forestLevelMax);
+      const progress=forestClamp(Number(next.progress)||0,0,100);
+      const nextGrowth=next.preview?trees:Math.min(forestLevelMax,trees+progress/100);
+      const liveStatus=trees===forestLevelMax?'forest complete':progress+' percent of the next tree';
+      const label=next.preview?'Forest preview at level '+trees+', '+trees+' of '+forestLevelMax+' trees.'
+        :'Isometric parking garage and personal forest, '+trees+' trees grown, '+liveStatus+'.';
+      canvas.setAttribute('aria-label',label);
       const changed=nextGrowth!==goalGrowth || active!==Boolean(next.active) || vehicle!==next.vehicle;
       if (!changed) return;
       goalGrowth=nextGrowth;
       active=Boolean(next.active);
       vehicle=next.vehicle;
-      canvas.setAttribute('aria-label','Isometric parking garage and personal forest, '+next.trees+' trees grown, '+next.progress+' percent of the next tree.');
       animate();
     },
     rotate(direction) {
