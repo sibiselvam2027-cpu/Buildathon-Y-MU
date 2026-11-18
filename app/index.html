@@ -3,16 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f5f7f2">
+  <meta name="theme-color" content="#f6f5ef">
   <meta name="description" content="Find and reserve a parking spot around DLF Cyber City in the ParkEasy interactive demo.">
   <title>ParkEasy | Parking before you arrive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="./styles.css">
   <script type="module" src="./app.mjs"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="top-inner">
-      <a class="brand" href="./" aria-label="ParkEasy home"><span class="brand-mark">P<i></i></span>Park<span>Easy</span></a>
+      <a class="brand" href="./" aria-label="ParkEasy home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M10 23V9h7a4.2 4.2 0 0 1 0 8.4h-7" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23.5" cy="23" r="2" fill="currentColor"/></svg></span><span>ParkEasy</span></a>
       <nav class="top-nav" aria-label="Main navigation">
         <button class="nav-link selected" id="nav-explore"><span data-icon="map"></span><span>Explore</span></button>
         <button class="nav-link" id="nav-sessions"><span data-icon="ticket"></span><span>My parking</span><i class="nav-dot" id="nav-dot" hidden></i></button>
@@ -22,10 +25,12 @@
   </header>
 
   <main class="site-main">
+    <div class="experience">
+    <div class="workspace">
     <section class="intro" aria-labelledby="main-title">
-      <p class="location-overline"><span data-icon="pin"></span> GURUGRAM, HARYANA</p>
-      <h1 id="main-title">Parking before <em>you arrive.</em></h1>
-      <p>See what’s open around DLF Cyber City and reserve your spot.</p>
+      <p class="location-overline"><span data-icon="pin"></span> DLF CYBER CITY, GURUGRAM</p>
+      <h1 id="main-title">Parking before <em>you arrive<span>.</span></em></h1>
+      <p>Find an open spot near your destination and reserve it before you leave.</p>
     </section>
 
     <form id="search-form" class="search-bar" aria-label="Find parking">
@@ -44,27 +49,33 @@
         <span class="field-body"><span class="field-label">Duration</span><select id="duration" name="duration"></select></span>
         <span class="field-arrow" data-icon="chevron"></span>
       </label>
-      <button class="primary search-submit" type="submit"><span data-icon="search"></span> Find parking</button>
+      <button class="primary search-submit" type="submit">Find parking <span data-icon="arrow-right"></span></button>
     </form>
 
     <div class="agent-strip">
       <span class="agent-icon" data-icon="sparkles"></span>
-      <span><strong>Ask ParkEasy</strong><span class="agent-separator"> · </span><span class="agent-hint">“A covered spot for my bike near CyberHub for 2 hours”</span></span>
-      <button id="open-agent" class="agent-open">Try assistant <span data-icon="arrow-right"></span></button>
+      <span><strong>Ask ParkEasy</strong><span class="agent-hint">Search in your own words</span></span>
+      <button id="open-agent" class="agent-open">Try it <span data-icon="arrow-right"></span></button>
     </div>
 
     <div id="booking-banner" class="booking-banner" hidden></div>
 
-    <section class="explore-shell" aria-label="Parking results and map">
-      <div class="result-heading">
-        <div class="result-kicker">PARKING NEAR <span id="result-area">DLF CYBERHUB</span></div>
-        <div class="result-title"><h2 id="result-count" aria-live="polite">Recommended spots</h2><label class="sort"><span class="sr-only">Sort spots</span><span data-icon="sort"></span><select id="sort"><option value="distance">Nearest</option><option value="price">Lowest price</option><option value="rating">Top rated</option></select><span data-icon="chevron"></span></label></div>
+      <section class="result-heading" aria-label="Parking results">
+        <div class="result-title"><div><p class="result-kicker">NEAR <span id="result-area">DLF CYBERHUB</span></p><h2 id="result-count" aria-live="polite">Recommended spots</h2></div><label class="sort"><span class="sr-only">Sort spots</span><select id="sort"><option value="distance">Nearest</option><option value="price">Lowest price</option><option value="rating">Top rated</option></select><span data-icon="chevron"></span></label></div>
         <div id="type-filters" class="type-filters" aria-label="Parking type"></div>
         <div id="amenity-filter" hidden></div>
-      </div>
-      <section id="map" class="map-panel" aria-label="Bird’s-eye parking map of DLF Cyber City"></section>
+      </section>
       <div id="results" class="results" aria-label="Recommended parking spaces"></div>
+    </div>
+
+    <section class="map-stage" aria-label="Parking map and selected spot">
+      <header class="map-heading"><span class="map-heading-icon" data-icon="map"></span><h2>Parking map</h2><span id="map-status" class="map-heading-status"></span></header>
+      <div class="map-body">
+        <section id="map" class="map-panel" aria-label="Bird’s-eye parking map of DLF Cyber City"></section>
+        <aside id="map-spotlight" class="map-spotlight" aria-label="Selected parking spot"></aside>
+      </div>
     </section>
+    </div>
     <footer class="page-footer"><span>ParkEasy <b>·</b> Gurugram pilot</span><button class="text-button" id="footer-info">What’s simulated?</button></footer>
   </main>
 

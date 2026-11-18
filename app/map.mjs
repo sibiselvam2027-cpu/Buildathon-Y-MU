@@ -28,33 +28,73 @@ const roads = [
 ];
 
 export function parkingMap(root,icon,onSelect) {
-  root.innerHTML = '<div class="map-surface" tabindex="0" aria-label="Drag the map or use arrow keys to pan"><canvas class="map-schematic" aria-hidden="true"></canvas><div class="map-tiles" aria-hidden="true"></div></div><div class="map-pins"></div><div class="map-place">'+icon('pin')+'<div><b class="map-place-name">DLF Cyber City</b><small>Gurugram, Haryana</small></div></div><div class="map-controls"><button class="map-control" aria-label="Zoom in" data-map="plus">+</button><button class="map-control" aria-label="Zoom out" data-map="minus">−</button><button class="map-control" aria-label="Center on destination" data-map="reset">'+icon('locate')+'</button></div><div class="map-key"><span class="status">Available</span><span class="status full">Unavailable</span></div><div class="map-attribution"><span class="map-source">Loading OpenStreetMap…</span></div><div class="pin-detail" hidden></div>';
+  root.innerHTML = '<div class="map-surface" tabindex="0" aria-label="Drag the map or use arrow keys to pan"><canvas class="map-schematic" aria-hidden="true"></canvas><div class="map-tiles" aria-hidden="true"></div></div><svg class="map-route" width="100%" height="100%" aria-hidden="true" style="position:absolute;inset:0;pointer-events:none;visibility:hidden"><line class="map-route-halo" stroke="white" stroke-opacity=".95" stroke-width="7" stroke-linecap="round"></line><line class="map-route-line" stroke="var(--map-route-accent,#276d57)" stroke-width="3.5" stroke-dasharray="1 8" stroke-linecap="round"></line></svg><div class="map-pins"></div><div class="map-place">'+icon('pin')+'<div><b class="map-place-name">DLF Cyber City</b><small>Gurugram, Haryana</small></div></div><div class="map-controls"><button type="button" class="map-control" aria-label="Zoom in" data-map="plus">+</button><button type="button" class="map-control" aria-label="Zoom out" data-map="minus">−</button><button type="button" class="map-control" aria-label="Center on destination" data-map="reset">'+icon('locate')+'</button></div><div class="map-key"><span class="status">Available</span><span class="status full">Unavailable</span></div><div class="map-attribution"><span class="map-source">Loading OpenStreetMap…</span></div><div class="pin-detail" hidden></div>';
   const surface = root.querySelector('.map-surface');
   const tiles = root.querySelector('.map-tiles');
   const canvas = root.querySelector('canvas');
   const pins = root.querySelector('.map-pins');
+  const route = root.querySelector('.map-route');
+  const routeLines = route.querySelectorAll('line');
+  const routeDots = root.querySelector('.map-route-line');
   const badge = root.querySelector('.map-place-name');
   const detail = root.querySelector('.pin-detail');
   const credit = root.querySelector('.map-source');
-  const current = new Map();
-  let centre, dest, spots=[], selected, drag, pendingFrame;
-  let zoom = root.clientWidth < 570 ? 16 : 17;
+  const tileCache = new Map();
+  const markers = new Map();
+  const motionPreference = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  const prefersReduced = () => motionPreference?.matches;
+  const baseZoom = () => root.clientWidth < 570 ? 16 : 17;
+  const destinationPin = document.createElement('span');
+  destinationPin.className = 'destination-pin';
+  destinationPin.setAttribute('role','img');
+  destinationPin.innerHTML = '<span class="destination-pin-core" aria-hidden="true"></span><span class="destination-pin-label" aria-hidden="true">Destination</span>';
+  pins.append(destinationPin);
+  let centre, dest, spots=[], selected, target, drag, motion, routeAnimation;
+  let pendingFrame = null;
+  let zoom = baseZoom();
+  let activeTileZoom = zoom;
+  let previousTileZoom;
 
   function frame() {
-    if (!pendingFrame) pendingFrame = requestAnimationFrame(() => {
+    if (pendingFrame !== null) return;
+    pendingFrame = requestAnimationFrame(time => {
       pendingFrame = null;
+      stepCamera(time);
       draw();
+      if (motion) frame();
     });
   }
 
-  function mapOrigin(w,h) {
-    const point = project(...centre,zoom);
-    return [point[0]-w/2,point[1]-h/2];
+  function stepCamera(time) {
+    if (!motion) return;
+    motion.start ??= time;
+    const fraction = clamp((time-motion.start)/motion.duration,0,1);
+    const progress = 1-(1-fraction)**3;
+    centre = motion.from.map((value,index) => value+(motion.to[index]-value)*progress);
+    zoom = motion.zoomFrom+(motion.zoomTo-motion.zoomFrom)*progress;
+    if (fraction >= 1) motion = null;
   }
 
-  function updateAttribution() {
-    const loaded = [...current.values()].some(image => image.classList.contains('ready'));
-    const loading = [...current.values()].some(image => !image.dataset.complete);
+  function moveCamera(to,zoomTo,animate) {
+    const moved = !centre || Math.abs(centre[0]-to[0])+Math.abs(centre[1]-to[1]) > .0000001 || Math.abs(zoom-zoomTo) > .001;
+    motion = centre && moved && animate && !prefersReduced() ? {
+      from:centre,
+      to,
+      zoomFrom:zoom,
+      zoomTo,
+      tileZoom:activeTileZoom,
+      duration:480
+    } : null;
+    if (!motion) {
+      centre = to;
+      zoom = zoomTo;
+    }
+    frame();
+  }
+
+  function updateAttribution(images) {
+    const loaded = images.some(image => image.classList.contains('ready'));
+    const loading = images.some(image => !image.dataset.complete);
     const label = loaded ? '© OpenStreetMap contributors' : (loading ? 'Loading map · DLF schematic' : 'Offline · DLF schematic');
     if (credit.dataset.label === label) return;
     credit.dataset.label = label;
@@ -66,78 +106,164 @@ export function parkingMap(root,icon,onSelect) {
     if (!centre || !root.clientWidth) return;
     const w = root.clientWidth;
     const h = root.clientHeight;
-    const [left,top] = mapOrigin(w,h);
+    const point = project(...centre,zoom);
+    const left = point[0]-w/2;
+    const top = point[1]-h/2;
     const local = (lat,lng) => {
       const [x,y] = project(lat,lng,zoom);
       return [x-left,y-top];
     };
     sketch(canvas,w,h,local,zoom);
     const visible = new Set();
-    for (let x=Math.floor(left/256); x<Math.ceil((left+w)/256); x++) {
-      for (let y=Math.floor(top/256); y<Math.ceil((top+h)/256); y++) {
-        const key = [zoom,x,y].join('/');
-        visible.add(key);
-        let image = current.get(key);
-        if (!image) {
-          image = document.createElement('img');
-          image.alt = '';
-          image.decoding = 'async';
-          image.draggable = false;
-          image.onload = () => { image.classList.add('ready'); image.dataset.complete = '1'; updateAttribution(); };
-          image.onerror = () => { image.dataset.complete = '1'; updateAttribution(); };
-          image.src = 'https://tile.openstreetmap.org/'+key+'.png';
-          current.set(key,image);
-          tiles.append(image);
-        }
-        image.style.left = Math.round(x*256-left)+'px';
-        image.style.top = Math.round(y*256-top)+'px';
-      }
+    const rasterZoom = motion && Math.abs(motion.tileZoom-zoom) < 1 ? motion.tileZoom : Math.round(zoom);
+    if (rasterZoom !== activeTileZoom) {
+      previousTileZoom = activeTileZoom;
+      activeTileZoom = rasterZoom;
     }
-    for (const [key,image] of current) {
-      if (!visible.has(key)) { image.remove(); current.delete(key); }
+    const primary = drawTiles(activeTileZoom,left,top,w,h,1,visible);
+    const underlay = previousTileZoom !== undefined && Math.abs(previousTileZoom-zoom)<1.25 && primary.some(image => !image.dataset.complete)
+      ? drawTiles(previousTileZoom,left,top,w,h,0,visible) : [];
+    if (!underlay.length) previousTileZoom = undefined;
+    for (const [key,image] of tileCache) {
+      if (visible.has(key)) continue;
+      image.remove();
+      if (tileCache.size > 72) tileCache.delete(key);
     }
-    updateAttribution();
+    updateAttribution([...primary,...underlay]);
     for (const button of pins.children) {
       const [x,y] = local(Number(button.dataset.lat),Number(button.dataset.lng));
       button.style.left = x+'px';
       button.style.top = y+'px';
       button.hidden = x<13 || x>w-13 || y<20 || y>h-14;
     }
+    if (target && dest) {
+      const [x1,y1] = local(target.lat,target.lng);
+      const [x2,y2] = local(dest.lat,dest.lng);
+      for (const line of routeLines) {
+        line.setAttribute('x1',x1);
+        line.setAttribute('y1',y1);
+        line.setAttribute('x2',x2);
+        line.setAttribute('y2',y2);
+      }
+      route.style.visibility = 'visible';
+    } else route.style.visibility = 'hidden';
+  }
+
+  function drawTiles(rasterZoom,left,top,w,h,order,visible) {
+    const images = [];
+    const size = 256 * 2**(zoom-rasterZoom);
+    for (let x=Math.floor(left/size); x<Math.ceil((left+w)/size); x++) {
+      for (let y=Math.floor(top/size); y<Math.ceil((top+h)/size); y++) {
+        const key = [rasterZoom,x,y].join('/');
+        visible.add(key);
+        let image = tileCache.get(key);
+        if (!image) {
+          image = document.createElement('img');
+          image.alt = '';
+          image.decoding = 'async';
+          image.draggable = false;
+          image.onload = () => { image.classList.add('ready'); image.dataset.complete = '1'; frame(); };
+          image.onerror = () => { image.dataset.complete = '1'; frame(); };
+          image.src = 'https://tile.openstreetmap.org/'+key+'.png';
+          tileCache.set(key,image);
+        }
+        if (image.parentNode !== tiles) tiles.append(image);
+        image.style.left = Math.round(x*size-left)+'px';
+        image.style.top = Math.round(y*size-top)+'px';
+        image.style.width = Math.ceil(size)+'px';
+        image.style.height = Math.ceil(size)+'px';
+        image.style.zIndex = order;
+        images.push(image);
+      }
+    }
+    return images;
   }
 
   function updateMarkers() {
-    const markerSet = spots.map(spot => {
+    const ids = new Set(spots.map(spot=>spot.id));
+    for (const [id,button] of markers) {
+      if (ids.has(id)) continue;
+      button.remove();
+      markers.delete(id);
+    }
+    for (const spot of spots) {
       const label = spot.name+', '+(spot.free ? spot.free+' spots available' : 'unavailable');
-      const button = document.createElement('button');
+      let button = markers.get(spot.id);
+      if (!button) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.spotId = spot.id;
+        button.innerHTML = '<span class="map-pin-symbol" aria-hidden="true">P</span><span class="map-pin-count" aria-hidden="true"></span>';
+        button.onclick = () => onSelect(spot.id);
+        pins.append(button);
+        markers.set(spot.id,button);
+      }
       button.className = 'map-pin'+(spot.free ? '' : ' full')+(spot.id===selected ? ' selected' : '');
       button.dataset.lat = spot.lat;
       button.dataset.lng = spot.lng;
       button.title = label;
       button.setAttribute('aria-label',label);
-      button.textContent = spot.free ? 'P '+spot.free : 'P ×';
-      button.onclick = () => onSelect(spot.id);
-      return button;
-    });
-    if (dest) {
-      const marker = document.createElement('span');
-      marker.className = 'destination-pin';
-      marker.dataset.lat = dest.lat;
-      marker.dataset.lng = dest.lng;
-      marker.setAttribute('aria-hidden','true');
-      markerSet.push(marker);
+      button.setAttribute('aria-pressed',String(spot.id===selected));
+      button.lastElementChild.textContent = spot.free || '×';
     }
-    pins.replaceChildren(...markerSet);
+    if (dest) {
+      destinationPin.dataset.lat = dest.lat;
+      destinationPin.dataset.lng = dest.lng;
+      destinationPin.setAttribute('aria-label','Destination: '+dest.name);
+      destinationPin.title = dest.name;
+    }
     frame();
   }
 
-  function recenter() {
+  function recenter(animate=true) {
     if (!dest) return;
-    zoom = root.clientWidth < 570 ? 16 : 17;
-    centre = [dest.lat+.00035,dest.lng+.00048];
-    frame();
+    moveCamera([dest.lat+.00035,dest.lng+.00048],baseZoom(),animate);
+  }
+
+  function pick(spot, {animate=true,reframe=true}={}) {
+    if (!spot || !dest) return;
+    const first = target?.id !== spot.id;
+    const previous = markers.get(selected);
+    const next = markers.get(spot.id);
+    if (previous && previous !== next) {
+      previous.classList.remove('selected');
+      previous.setAttribute('aria-pressed','false');
+    }
+    if (next) {
+      next.classList.add('selected');
+      next.setAttribute('aria-pressed','true');
+    }
+    selected = spot.id;
+    target = spot;
+    if (first && animate && !prefersReduced() && routeDots.animate) {
+      routeAnimation?.cancel();
+      routeAnimation = routeDots.animate([{strokeDashoffset:0},{strokeDashoffset:-18}],{duration:1800,iterations:Infinity});
+    }
+    if (!reframe || !root.clientWidth || !root.clientHeight) {frame();return;}
+    const [x1,y1] = project(spot.lat,spot.lng,0);
+    const [x2,y2] = project(dest.lat,dest.lng,0);
+    const ratio = Math.min(root.clientWidth*.62/Math.max(Math.abs(x1-x2),.0001),root.clientHeight*.43/Math.max(Math.abs(y1-y2),.0001));
+    const nextZoom = clamp(Math.floor(Math.log2(ratio)),14,18);
+    const offset = root.clientHeight*.09/2**nextZoom;
+    moveCamera(unproject((x1+x2)/2,(y1+y2)/2+offset,0),nextZoom,animate);
+  }
+
+  function clearFocus({recenter:reset=false}={}) {
+    const previous = markers.get(selected);
+    if (previous) {
+      previous.classList.remove('selected');
+      previous.setAttribute('aria-pressed','false');
+    }
+    selected = undefined;
+    target = undefined;
+    routeAnimation?.cancel();
+    routeAnimation = undefined;
+    if (reset) recenter();
+    else frame();
   }
 
   function pan(x,y) {
+    motion = null;
     const point = project(...centre,zoom);
     const [lat,lng] = unproject(point[0]+x,point[1]+y,zoom);
     centre = [clamp(lat,28.41,28.57),clamp(lng,77.01,77.16)];
@@ -145,8 +271,9 @@ export function parkingMap(root,icon,onSelect) {
   }
 
   function zoomBy(amount) {
-    zoom = clamp(zoom+amount,13,19);
-    frame();
+    if (!centre) return;
+    const current = motion?.zoomTo ?? Math.round(zoom);
+    moveCamera(centre,clamp(current+amount,13,19),true);
   }
 
   root.querySelector('.map-controls').addEventListener('click',event => {
@@ -162,6 +289,7 @@ export function parkingMap(root,icon,onSelect) {
   },{passive:false});
   surface.addEventListener('pointerdown',event => {
     if (event.button!==0 || !centre) return;
+    motion = null;
     drag = [event.clientX,event.clientY];
     surface.setPointerCapture(event.pointerId);
     surface.classList.add('dragging');
@@ -180,17 +308,29 @@ export function parkingMap(root,icon,onSelect) {
     event.preventDefault();
     pan(...directions[event.key]);
   });
+  motionPreference?.addEventListener?.('change',event=>{
+    if (!event.matches) return;
+    routeAnimation?.cancel();
+    routeAnimation = undefined;
+    if (motion) moveCamera(motion.to,motion.zoomTo,false);
+  });
   new ResizeObserver(frame).observe(root);
   return {
-    set(destination,inventory,active,fly=false) {
+    set(destination,inventory,active,fly=false,{reframe=true}={}) {
       const moved = dest?.id !== destination.id;
+      const reset = moved || !centre || fly;
+      const changed = selected !== active;
       dest = destination;
       spots = inventory;
-      selected = active;
       badge.textContent = destination.id === 'cyberhub' ? 'DLF Cyber City' : destination.name;
-      if (moved || !centre || fly) recenter();
+      if (reset) recenter();
       updateMarkers();
+      const spot = spots.find(value=>value.id===active);
+      if (spot) pick(spot,{reframe:!reset && reframe && changed});
+      else clearFocus();
     },
+    focus:pick,
+    clearFocus,
     popup(html) {detail.innerHTML=html;detail.hidden=!html;}
   };
 }
@@ -203,7 +343,7 @@ function sketch(canvas,w,h,local,zoom) {
   }
   const ctx=canvas.getContext('2d');
   ctx.setTransform(density,0,0,density,0,0);
-  ctx.fillStyle='#e9eee5';
+  ctx.fillStyle='#e9ebe3';
   ctx.fillRect(0,0,w,h);
   const scale = 2**(zoom-17);
   function poly(points,fill) {
@@ -213,9 +353,9 @@ function sketch(canvas,w,h,local,zoom) {
     ctx.fillStyle=fill;
     ctx.fill();
   }
-  poly([[28.496,77.078],[28.504,77.082],[28.501,77.089],[28.497,77.087]],'#dcebd8');
-  poly([[28.488,77.090],[28.49,77.095],[28.493,77.095],[28.4915,77.0915]],'#d6e9d7');
-  poly([[28.5013,77.0958],[28.4992,77.099],[28.5032,77.101],[28.5055,77.098]],'#d7e9d4');
+  poly([[28.496,77.078],[28.504,77.082],[28.501,77.089],[28.497,77.087]],'#dce7d9');
+  poly([[28.488,77.090],[28.49,77.095],[28.493,77.095],[28.4915,77.0915]],'#dce6da');
+  poly([[28.5013,77.0958],[28.4992,77.099],[28.5032,77.101],[28.5055,77.098]],'#d9e5d7');
   for (let row=0;row<43;row++) {
     for (let col=0;col<44;col++) {
       if ((row*11+col*7)%13<3) continue;
@@ -226,7 +366,7 @@ function sketch(canvas,w,h,local,zoom) {
       ctx.save();
       ctx.translate(x,y);
       ctx.rotate((col%4-1.5)*.12);
-      ctx.fillStyle=(row*col)%7<3 ? '#d6e1d4' : '#dce4d8';
+      ctx.fillStyle=(row*col)%7<3 ? '#d8ded3' : '#e0e4d9';
       ctx.fillRect(-12*scale,-7*scale,(21+(row+col)%6*4)*scale,(12+(row*col)%5*4)*scale);
       ctx.restore();
     }
@@ -236,10 +376,10 @@ function sketch(canvas,w,h,local,zoom) {
     road.points.forEach(([lat,lng],index) => ctx[index ? 'lineTo' : 'moveTo'](...local(lat,lng)));
     ctx.lineJoin='round';
     ctx.lineCap='round';
-    ctx.strokeStyle=road.major ? '#d6d1b5' : '#d8e1d7';
+    ctx.strokeStyle=road.major ? '#d5d5c9' : '#dadfd5';
     ctx.lineWidth=Math.max(3,(road.width+2)*scale);
     ctx.stroke();
-    ctx.strokeStyle=road.major ? '#fff2c8' : '#f9faf4';
+    ctx.strokeStyle=road.major ? '#faf5e8' : '#f9faf4';
     ctx.lineWidth=Math.max(2,road.width*scale);
     ctx.stroke();
   }

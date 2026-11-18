@@ -80,32 +80,41 @@ function render(fly=false) {
   const query=state.query;
   const spotList=recommendations(query,state);
   const dest=placeById(query.destination) ?? destinations[0];
+  const selectedId=highlight ?? spotList[0]?.id ?? null;
   $('#result-area').textContent=dest.name.toUpperCase();
   $('#result-count').textContent=spotList.length ? spotList.length+' recommended spot'+(spotList.length===1?'':'s') : 'No matching spots';
+  $('#map-status').textContent=query.vehicle==='bike' ? 'Bike availability' : 'Car availability';
   $('#type-filters').innerHTML=['','Public lot','Office','Society'].map(type=>'<button class="filter-pill'+(query.type===type?' active':'')+'" data-type="'+type+'" aria-pressed="'+(query.type===type)+'">'+(typeLabel[type]??'All spots')+'</button>').join('');
   $('#amenity-filter').hidden=!query.amenity;
   $('#amenity-filter').innerHTML=query.amenity ? '<button class="filter-pill active" data-action="clear-amenity">'+esc(query.amenity)+' '+icon('close')+'</button>' : '';
-  $('#results').innerHTML=spotList.length ? spotList.map(spot=>card(spot,query)).join('') : '<div class="empty"><strong>No available spots for these filters.</strong>Change the parking type, amenity or vehicle to see more options.</div>';
-  map.set(dest,parking.map(spot=>({...spot,free:capacity(spot,query.vehicle,state)})),highlight,fly);
-  if (!highlight) map.popup('');
-  else renderPin(highlight);
+  $('#results').innerHTML=spotList.length ? spotList.map(spot=>card(spot,query,selectedId)).join('') : '<div class="empty"><strong>No available spots for these filters.</strong>Change the parking type, amenity or vehicle to see more options.</div>';
+  map.set(dest,parking.map(spot=>({...spot,free:capacity(spot,query.vehicle,state)})),selectedId,fly,{reframe:false});
+  renderSpotlight(selectedId,dest,spotList[0]?.id);
   tick();
 }
 
-function card(spot,query) {
+function card(spot,query,selectedId) {
   const free=capacity(spot,query.vehicle,state);
-  return '<article class="spot-card'+(highlight===spot.id?' highlighted':'')+'" data-spot-card="'+spot.id+'"><div class="spot-summary"><span class="spot-icon '+(spot.type==='Office'?'office':spot.type==='Society'?'society':'')+'">'+icon(typeIcon[spot.type])+'</span><div><div class="spot-meta">'+spot.type+' <span>·</span> '+distanceText(spot.dist)+' <span>·</span> '+icon('star')+' '+spot.rating.toFixed(1)+'</div><h3 class="spot-name">'+spot.name+'</h3></div><div class="spot-price"><strong>'+amount(spot.price)+'</strong><br><span>'+durationText(query.duration)+' total</span></div></div><div class="spot-bottom"><span class="status">'+free+' open</span><div class="spot-actions"><button data-action="panorama" data-id="'+spot.id+'" aria-label="360° preview of '+spot.name+'">'+icon('rotate')+' 360°</button><button class="view-spot" data-action="spot" data-id="'+spot.id+'" aria-label="View '+spot.name+'">View spot '+icon('arrow-right')+'</button></div></div></article>';
+  const selected=selectedId===spot.id;
+  return '<article class="spot-card'+(selected?' highlighted':'')+'" data-spot-card="'+spot.id+'"><div class="spot-summary"><span class="spot-icon">'+icon(typeIcon[spot.type])+'</span><div><h3 class="spot-name"><button class="spot-select" data-action="focus" data-id="'+spot.id+'" aria-label="Show '+spot.name+' on the map" aria-pressed="'+selected+'">'+spot.name+'</button></h3><div class="spot-meta">'+spot.type+' <span>·</span> '+distanceText(spot.dist)+' <span>·</span> '+icon('star')+' '+spot.rating.toFixed(1)+'</div></div><div class="spot-price"><strong>'+amount(spot.price)+'</strong><br><span>'+durationText(query.duration)+' total</span></div></div><div class="spot-bottom"><span class="status">'+free+' open</span><div class="spot-actions"><button data-action="panorama" data-id="'+spot.id+'" aria-label="360° preview of '+spot.name+'">'+icon('rotate')+' 360°</button><button class="view-spot" data-action="spot" data-id="'+spot.id+'" aria-label="View '+spot.name+'">View spot '+icon('arrow-right')+'</button></div></div></article>';
 }
 
 function selectPin(id) {
-  highlight=highlight===id ? null : id;
+  highlight=id;
   render();
+  map.focus(spotById(id));
 }
 
-function renderPin(id) {
+function renderSpotlight(id,destination,firstId) {
+  const panel=$('#map-spotlight');
   const spot=spotById(id);
-  const free=capacity(spot,state.query.vehicle,state);
-  map.popup('<button data-action="pin-close" aria-label="Close map detail">'+icon('close')+'</button><strong>'+spot.name+'</strong><p>'+spot.type+' · '+spot.area+'</p><span class="status'+(free?'':' full')+'">'+(free?free+' spots open':'Unavailable')+'</span><br><button class="text-button" data-action="spot" data-id="'+id+'">View details '+icon('arrow-right')+'</button>');
+  panel.hidden=!spot;
+  if (!spot) {panel.replaceChildren();return;}
+  const {vehicle,duration,sort}=state.query;
+  const free=capacity(spot,vehicle,state);
+  const topLabel={distance:'Closest match',price:'Lowest price',rating:'Top rated'}[sort];
+  const label=id===firstId ? topLabel : 'Selected spot';
+  panel.innerHTML='<div class="spotlight-content"><div class="spotlight-kicker">'+icon('locate')+' '+label+'<span class="status'+(free?'':' full')+'">'+(free?free+' open':'Unavailable')+'</span></div><div class="spotlight-heading"><h3>'+spot.name+'</h3><strong class="spotlight-price">'+amount(totalFor(spot,vehicle,duration))+'</strong></div><p class="spotlight-meta">'+distanceText(distance(destination,spot))+' straight-line · '+spot.type+' · '+durationText(duration)+' total</p><div class="spotlight-actions"><button class="secondary" data-action="panorama" data-id="'+id+'" aria-label="360° preview of '+spot.name+'">'+icon('rotate')+' 360°</button><button class="'+(free?'primary':'secondary')+'" data-action="spot" data-id="'+id+'">'+(free?'View spot':'See details')+' '+icon('arrow-right')+'</button></div></div>';
 }
 
 function modal(kicker,title,html,{wide=false}={}) {
@@ -306,7 +315,14 @@ document.addEventListener('click',async event=>{
   if (action==='spot') spotDetails(spotById(id));
   if (action==='panorama') panorama(spotById(id));
   if (action==='sessions') showSessions();
-  if (action==='pin-close') {highlight=null;render();}
+  if (action==='focus') {
+    selectPin(id);
+    document.querySelector('.spot-select[data-id="'+id+'"]')?.focus({preventScroll:true});
+    if (window.matchMedia('(max-width: 760px)').matches) {
+      const behavior=window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth';
+      $('#map').scrollIntoView({block:'center',behavior});
+    }
+  }
   if (action==='clear-amenity') applyQuery({amenity:''});
   if (action==='example') {$('#agent-query').value=button.dataset.example;$('#agent-query').focus();}
   if (action==='star') {
