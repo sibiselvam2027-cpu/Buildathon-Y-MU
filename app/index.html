@@ -3,21 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f6f5ef">
+  <meta name="theme-color" content="#17261d">
   <meta name="description" content="Find and reserve a parking spot around DLF Cyber City in the ParkEasy interactive demo.">
   <title>ParkEasy | Parking before you arrive</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Pixelify+Sans:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="./styles.css">
   <script type="module" src="./app.mjs"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="top-inner">
-      <a class="brand" href="./" aria-label="ParkEasy home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M10 23V9h7a4.2 4.2 0 0 1 0 8.4h-7" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23.5" cy="23" r="2" fill="currentColor"/></svg></span><span>ParkEasy</span></a>
+      <a class="brand" href="./" aria-label="ParkEasy home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 16 16" shape-rendering="crispEdges"><path d="M4 3h6v1h2v5h-2v1H6v3H4V3Zm2 2v3h4V5H6Zm6 6h2v2h-2v-2Z" fill="currentColor" fill-rule="evenodd"/></svg></span><span>ParkEasy</span></a>
       <nav class="top-nav" aria-label="Main navigation">
-        <button class="nav-link selected" id="nav-explore"><span data-icon="map"></span><span>Explore</span></button>
+        <button class="nav-link selected" id="nav-explore"><span data-icon="map"></span><span>World</span></button>
         <button class="nav-link" id="nav-sessions"><span data-icon="ticket"></span><span>My parking</span><i class="nav-dot" id="nav-dot" hidden></i></button>
       </nav>
       <button class="demo-button" id="demo-info"><i></i><span>Demo mode</span><span class="info-icon" data-icon="info"></span></button>
@@ -82,17 +82,20 @@
       <div id="results" class="results" aria-label="Recommended parking spaces"></div>
     </div>
 
-    <section class="map-stage" aria-label="Parking and forest">
-      <header class="map-heading">
-        <div class="stage-tabs" role="tablist" aria-label="Parking views">
-          <button type="button" id="forest-tab" role="tab" aria-selected="true" aria-controls="forest-view"><span data-icon="tree"></span> My forest</button>
-          <button type="button" id="map-tab" role="tab" aria-selected="false" aria-controls="parking-view" tabindex="-1"><span data-icon="map"></span> Parking map</button>
+    <section class="map-stage" aria-label="Parking world">
+      <section class="stage-panel map-stage-panel" aria-labelledby="map-title">
+        <header class="map-heading"><span class="stage-heading-icon" data-icon="map"></span><h2 id="map-title" tabindex="-1">Parking map</h2><span id="map-status" class="map-heading-status"></span></header>
+        <div class="map-body" id="parking-view">
+          <section id="map" class="map-panel" aria-label="Bird’s-eye parking map of DLF Cyber City"></section>
+          <aside id="map-spotlight" class="map-spotlight" aria-label="Selected parking spot"></aside>
         </div>
-        <span id="map-status" class="map-heading-status" hidden></span>
-      </header>
-      <div class="forest-body" id="forest-view" role="tabpanel" aria-labelledby="forest-tab">
+      </section>
+      <div class="stage-separator" aria-hidden="true"></div>
+      <section class="stage-panel forest-stage-panel" aria-labelledby="forest-title">
+        <header class="map-heading"><span class="stage-heading-icon" data-icon="tree"></span><h2 id="forest-title" tabindex="-1">My forest</h2></header>
+        <div class="forest-body" id="forest-view">
         <div class="forest-scene" id="forest-scene">
-          <button type="button" id="forest-rotate" class="forest-rotate" data-action="forest-rotate" aria-label="Rotate the 3D parking garage"><span data-icon="rotate"></span> Rotate</button>
+          <button type="button" id="forest-rotate" class="forest-rotate" data-action="forest-rotate" aria-label="Rotate the 3D parking garage"><span data-icon="rotate"></span> <span>Rotate</span></button>
         </div>
         <div class="forest-dashboard">
           <div class="forest-metrics">
@@ -103,11 +106,8 @@
           <progress id="forest-growth" class="forest-growth" value="0" max="100" aria-label="Progress toward your next tree"></progress>
           <div class="forest-caption"><p id="forest-note">Every 2 hours parked grows a tree in your forest.</p><button type="button" id="forest-advance" class="text-button" data-action="forest-simulate" hidden>Demo · Add 30 min</button></div>
         </div>
-      </div>
-      <div class="map-body" id="parking-view" role="tabpanel" aria-labelledby="map-tab" hidden>
-        <section id="map" class="map-panel" aria-label="Bird’s-eye parking map of DLF Cyber City"></section>
-        <aside id="map-spotlight" class="map-spotlight" aria-label="Selected parking spot"></aside>
-      </div>
+        </div>
+      </section>
     </section>
     </div>
     <footer class="page-footer"><span>ParkEasy <b>·</b> Gurugram pilot</span><button class="text-button" id="footer-info">What’s simulated?</button></footer>

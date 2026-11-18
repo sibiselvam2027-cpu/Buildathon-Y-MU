@@ -1,4 +1,4 @@
-import {destinations,parking,durations,durationText,rateFor,totalFor,getBooking,capacity,distance,distanceText,recommendations,initialQuery,loadState,storageKey,reserve,arrive,leave,review} from './parking.mjs';
+import {destinations,parking,durations,durationText,rateFor,totalFor,getBooking,capacity,distance,distanceText,recommendations,initialQuery,loadState,storageKey,reserve,arrive,leave} from './parking.mjs';
 import {parkingMap} from './map.mjs';
 import {mountPanorama} from './panorama.mjs';
 import {interpretRequest} from './assistant.mjs';
@@ -69,17 +69,6 @@ $('#destination').innerHTML=destinations.map(place=>'<option value="'+place.id+'
 $('#duration').innerHTML=durations.map(minutes=>'<option value="'+minutes+'">'+durationText(minutes)+'</option>').join('');
 const map = parkingMap($('#map'),icon,selectPin);
 const forest = mountForest($('#forest-scene'));
-
-function showStage(view) {
-  const isMap=view==='map';
-  $('#parking-view').hidden=!isMap;
-  $('#forest-view').hidden=isMap;
-  $('#map-status').hidden=!isMap;
-  $('#map-tab').setAttribute('aria-selected',String(isMap));
-  $('#forest-tab').setAttribute('aria-selected',String(!isMap));
-  $('#map-tab').tabIndex=isMap?0:-1;
-  $('#forest-tab').tabIndex=isMap?-1:0;
-}
 
 function renderForest() {
   const growth=forestProgress(state.bookings);
@@ -164,7 +153,6 @@ function card(spot,query,selectedId) {
 
 function selectPin(id) {
   highlight=id;
-  showStage('map');
   render();
   map.focus(spotById(id));
 }
@@ -222,7 +210,7 @@ function panorama(spot) {
 function showDemo() {
   mode='demo';
   modal('Gurugram prototype','What’s simulated?',
-    '<ul class="scenario-list"><li>Parking locations, prices, availability and receipts use sample data. Arrival and departure are self-reported.</li><li>OpenStreetMap supplies map imagery when available. The map has an offline schematic, and directions use approximate pins.</li><li>360° previews are generated 3D scenes. Parking and reviews stay in this browser when it supports storage.</li><li>Forest growth is based on time parked in this demo. Each tree represents two parked hours. The percentage tracks the next tree milestone.</li></ul>');
+    '<ul class="scenario-list"><li>Parking locations, prices, availability and receipts use sample data. Arrival and departure are self-reported.</li><li>OpenStreetMap supplies map imagery when available. The map has an offline schematic, and directions use approximate pins.</li><li>360° previews are generated 3D scenes. Parking sessions stay in this browser when it supports storage.</li><li>Forest growth is based on time parked in this demo. Each tree represents two parked hours. The percentage tracks the next tree milestone.</li></ul>');
 }
 
 function sessionLink(booking,spot) {
@@ -231,13 +219,11 @@ function sessionLink(booking,spot) {
 
 function showSessions() {
   const booking=getBooking(state);
-  const pending=state.bookings.find(value=>value.id===state.reviewPending && value.status==='ended' && !value.review);
-  if (!booking && pending) {showReview(pending);return;}
   mode='sessions';
   if (!booking) {
     const past=state.bookings.filter(value=>value.status==='ended');
     modal('My parking',past.length?'Parking history':'Your parking',
-      past.length ? past.slice(0,8).map(value=>'<div class="session-item"><b>'+esc(spotById(value.spot)?.name??'Parking')+'</b><small>'+amount(value.amount)+' paid (demo) · '+(value.overstay?'Ended after time limit':'Ended on time')+(value.review?' · ★ '+value.review.stars+'/5':'')+'</small></div>').join('') : '<p>Your reservations and active session will appear here.</p><div class="modal-actions"><button class="primary" data-action="close">Explore parking</button></div>');
+      past.length ? past.slice(0,8).map(value=>'<div class="session-item"><b>'+esc(spotById(value.spot)?.name??'Parking')+'</b><small>'+amount(value.amount)+' paid (demo) · '+(value.overstay?'Ended after time limit':'Ended on time')+'</small></div>').join('') : '<p>Your reservations and active session will appear here.</p><div class="modal-actions"><button class="primary" data-action="close">Explore parking</button></div>');
     return;
   }
   const spot=spotById(booking.spot);
@@ -253,42 +239,11 @@ function showSessions() {
   }
 }
 
-function showReview(booking) {
+function showCheckout(booking) {
   const spot=spotById(booking.spot);
-  mode='review';
-  const choices=[1,2,3,4,5].map(value=>'<label><input type="radio" name="rating" value="'+value+'" aria-label="'+value+' star'+(value===1?'':'s')+'"><span aria-hidden="true">★</span></label>').join('');
-  modal('Parking completed','How was your parking?',
-    '<p>You’ve checked out of <b>'+spot.name+'</b>.</p><form id="review-form"><fieldset class="rating" aria-describedby="review-feedback"><legend class="modal-small">Rate this spot from 1 to 5 stars</legend>'+choices+'</fieldset><label class="modal-small" for="review-note">Add a comment (optional)</label><textarea id="review-note" name="note" class="modal-input" rows="2" maxlength="300" placeholder="How was the gate, lighting or availability?"></textarea><p id="review-feedback" class="review-feedback" role="alert" hidden></p><div class="modal-actions"><button id="review-submit" class="primary" type="submit">Submit review '+icon('arrow-right')+'</button><button class="text-button" type="button" data-action="close">Skip for now</button></div></form>');
-  const form=$('#review-form');
-  form.addEventListener('change',()=>{$('#review-feedback').hidden=true;});
-  form.addEventListener('submit',event=>submitReview(event,booking.id));
-}
-
-async function submitReview(event,id) {
-  event.preventDefault();
-  const form=event.currentTarget;
-  const data=new FormData(form);
-  const stars=Number(data.get('rating'));
-  const feedback=$('#review-feedback');
-  if (!stars) {
-    feedback.textContent='Choose a star rating to submit your review.';
-    feedback.hidden=false;
-    form.querySelector('[name="rating"]')?.focus();
-    return;
-  }
-  const button=$('#review-submit');
-  button.disabled=true;
-  let saved;
-  try {saved=await changeBooking(value=>review(value,id,stars,String(data.get('note')??'')));}
-  catch {
-    feedback.textContent='Couldn’t save the review. Please try again.';
-    feedback.hidden=false;
-    button.disabled=false;
-    return;
-  }
-  if (studio.open && mode==='review' && form.isConnected) studio.close();
-  render();
-  toast(saved?'Review saved. Thanks for parking with ParkEasy.':'This parking session no longer has a review to submit.');
+  mode='checkout';
+  modal('Parking complete','You’re checked out',
+    '<p>You’ve left <b>'+esc(spot.name)+'</b>.</p><div class="modal-actions"><button type="button" class="secondary" data-action="submit-review">Submit review</button><button type="button" class="primary" data-action="close">Done '+icon('check')+'</button></div>');
 }
 
 function timerText(seconds) {
@@ -300,17 +255,16 @@ function tick() {
   renderForest();
   const booking=getBooking(state);
   const banner=$('#booking-banner');
-  const ended=!booking && state.bookings.some(value=>value.id===state.reviewPending && value.status==='ended' && !value.review);
   const active=booking?.status==='active';
   const expired=active && demoClock(booking)>=booking.ends;
-  $('#nav-dot').hidden=!booking && !ended;
-  banner.hidden=!booking && !ended;
+  $('#nav-dot').hidden=!booking;
+  banner.hidden=!booking;
   if (banner.hidden) {banner.replaceChildren();return;}
   banner.classList.toggle('overdue',expired);
-  const label=ended?'Parking complete · Rate the spot':expired?'Time exceeded · Please move your vehicle':active?'Parking active · '+spotById(booking.spot).name:'Spot reserved · '+spotById(booking.spot).name;
+  const label=expired?'Time exceeded · Please move your vehicle':active?'Parking active · '+spotById(booking.spot).name:'Spot reserved · '+spotById(booking.spot).name;
   if (banner.dataset.label!==label || !banner.firstChild) {
     banner.dataset.label=label;
-    banner.innerHTML='<strong>'+esc(label)+'</strong><button data-action="sessions">'+(ended?'Leave a review':'My parking')+'</button>';
+    banner.innerHTML='<strong>'+esc(label)+'</strong><button data-action="sessions">My parking</button>';
   }
   if (active && mode==='sessions') {
     const seconds=Math.ceil(Math.abs(booking.ends-demoClock(booking))/1000);
@@ -386,7 +340,6 @@ function applyQuery(next,fly=false) {
   highlight=null;
   save();
   syncControls();
-  if (fly) showStage('map');
   render(fly);
 }
 
@@ -405,21 +358,6 @@ $('#nav-explore').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
 $('#nav-sessions').onclick=showSessions;
 $('#demo-info').onclick=showDemo;
 $('#footer-info').onclick=showDemo;
-for (const view of ['forest','map']) {
-  const tab=$('#'+view+'-tab');
-  tab.addEventListener('click',()=>{
-    showStage(view);
-    if (view==='map') render(true);
-  });
-  tab.addEventListener('keydown',event=>{
-    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
-    event.preventDefault();
-    const next=event.key==='Home'?'forest':event.key==='End'?'map':(view==='map'?'forest':'map');
-    showStage(next);
-    $('#'+next+'-tab').focus();
-    if (next==='map') render(true);
-  });
-}
 agentInput.addEventListener('input',clearAgentOffer);
 agentForm.addEventListener('submit',event=>{
   event.preventDefault();
@@ -467,13 +405,16 @@ document.addEventListener('click',async event=>{
   if (!button) return;
   const {id,action}=button.dataset;
   if (action==='close') studio.close();
+  if (action==='submit-review' && mode==='checkout') {
+    studio.close();
+    toast('Review submitted.');
+  }
   if (action==='spot') spotDetails(spotById(id));
   if (action==='panorama') panorama(spotById(id));
   if (action==='sessions') showSessions();
   if (action==='forest') {
-    showStage('forest');
     studio.close();
-    $('#forest-tab').focus({preventScroll:true});
+    $('#forest-title').focus({preventScroll:true});
     const behavior=window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth';
     $('#forest-view').scrollIntoView({block:'nearest',behavior});
   }
@@ -524,12 +465,13 @@ document.addEventListener('click',async event=>{
   }
   if (action==='leave') {
     button.disabled=true;
-    await changeBooking(value=>{
+    const ended=await changeBooking(value=>{
       const booking=getBooking(value);
       return booking ? leave(value,id,demoClock(booking)) : null;
     });
     render();
-    showSessions();
+    if (ended) showCheckout(ended);
+    else showSessions();
   }
   if (action==='cancel') {
     await changeBooking(value=>{

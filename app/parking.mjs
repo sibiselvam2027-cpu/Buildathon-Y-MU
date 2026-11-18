@@ -57,13 +57,13 @@ export function recommendations(query,state) {
 }
 
 export const initialQuery = {vehicle:'car',destination:'cyberhub',duration:120,type:'',amenity:'',amenities:[],maxPrice:null,maxHourlyPrice:null,sort:'distance'};
-export const initialState = () => ({query:{...initialQuery},bookings:[],reviewPending:null});
+export const initialState = () => ({query:{...initialQuery},bookings:[]});
 export const storageKey = 'parkeasy-dlf-v1';
 
 export function loadState(storage) {
   try {
     const saved = JSON.parse(storage.getItem(storageKey));
-    if (saved && Array.isArray(saved.bookings)) return {...initialState(),...saved,query:{...initialQuery,...saved.query}};
+    if (saved && Array.isArray(saved.bookings)) return {bookings:saved.bookings,query:{...initialQuery,...saved.query}};
   } catch {}
   return initialState();
 }
@@ -73,7 +73,6 @@ export function reserve(state, spot, time, id, query=state.query) {
   if (getBooking(state) || !spot || !capacity(spot,vehicle,state)) return null;
   const booking = {id,spot:spot.id,vehicle,minutes:duration,destination,amount:totalFor(spot,vehicle,duration),created:time,status:'reserved'};
   state.bookings.unshift(booking);
-  state.reviewPending = null;
   return booking;
 }
 
@@ -88,14 +87,5 @@ export function leave(state,id,time) {
   const booking = state.bookings.find(value => value.id === id && value.status === 'active');
   if (!booking) return null;
   Object.assign(booking,{status:'ended',ended:time,overstay:time >= booking.ends});
-  state.reviewPending = id;
   return booking;
-}
-
-export function review(state,id,stars,note) {
-  const booking = state.bookings.find(value => value.id === id && value.status === 'ended');
-  if (!booking || id !== state.reviewPending || !Number.isInteger(stars) || stars < 1 || stars > 5) return false;
-  booking.review = {stars,note:note.trim().slice(0,300)};
-  state.reviewPending = null;
-  return true;
 }
