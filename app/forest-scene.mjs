@@ -91,6 +91,26 @@ function makeGeometry(camera,growth,active,vehicle) {
       block(x-.12*size,y-.13*size,z+1.58*size,.24*size,.25*size,.17*size,colors.tip);
     }
   }
+  function boarRanger(x,y,z) {
+    tile(x-.43,y-.49,z,.87,.99,'#3a4d3238',.051);
+    tile(x-.32,y-.43,z+.004,.65,.86,'#3448332d',.053);
+    for (const footX of [x-.26,x+.13]) {
+      for (const footY of [y-.31,y+.18]) block(footX,footY,z+.008,.13,.14,.22,'#734d48');
+    }
+    block(x-.29,y-.42,z+.18,.58,.77,.38,'#ad6e5d');
+    block(x-.23,y-.34,z+.56,.48,.50,.06,'#c1826c');
+    block(x-.08,y-.51,z+.44,.14,.13,.13,'#905950');
+    block(x-.31,y+.19,z+.37,.62,.38,.36,'#c98375');
+    block(x-.20,y+.56,z+.39,.40,.18,.18,'#e8a797');
+    for (const nostrilX of [x-.125,x+.065]) block(nostrilX,y+.739,z+.44,.06,.014,.055,'#81564b');
+    for (const eyeX of [x-.23,x+.17]) block(eyeX,y+.568,z+.605,.06,.015,.063,'#342d2a');
+    for (const earX of [x-.285,x+.17]) block(earX,y+.23,z+.70,.115,.13,.17,'#bc776b');
+    block(x-.26,y+.13,z+.29,.53,.12,.13,'#44836a');
+    block(x+.266,y+.136,z+.28,.07,.17,.16,'#61a283');
+    block(x+.328,y+.181,z+.34,.018,.078,.064,'#e2c577');
+    block(x+.345,y+.213,z+.355,.014,.019,.052,'#547c4a');
+    block(x+.345,y+.191,z+.389,.014,.052,.019,'#547c4a');
+  }
   function car(x,y,z,color,parked=false) {
     tile(x-.11,y-.1,z,.99,1.72,'#323d37',.011);
     for (const wheelX of [x-.055,x+.651]) {
@@ -229,6 +249,7 @@ function makeGeometry(camera,growth,active,vehicle) {
   for (const [x,y,scale] of [[10.37,.78,.6],[16.33,.78,.55],[10.29,5.51,.53],[16.41,10.39,.5]]) shrub(x,y,1.37,scale);
   block(10.32,8.72,1.37,.29,.93,.13,colors.bark);
   block(10.36,8.77,1.50,.25,.82,.12,'#ba9d75');
+  boarRanger(12.43,10.02,1.383);
   return faces;
 }
 
@@ -243,7 +264,7 @@ export function mountForest(host) {
     canvas=document.createElement('canvas');
     canvas.className='forest-canvas';
     canvas.setAttribute('role','img');
-    canvas.setAttribute('aria-label','Isometric parking garage and personal forest');
+    canvas.setAttribute('aria-label','Isometric parking garage and personal forest with a boar ranger mascot');
     host.append(canvas);
   }
   const ctx=canvas.getContext?.('2d');
@@ -341,7 +362,7 @@ export function mountForest(host) {
       const liveStatus=trees===forestLevelMax?'forest complete':progress+' percent of the next tree';
       const label=next.preview?'Forest preview at level '+trees+', '+trees+' of '+forestLevelMax+' trees.'
         :'Isometric parking garage and personal forest, '+trees+' trees grown, '+liveStatus+'.';
-      canvas.setAttribute('aria-label',label);
+      canvas.setAttribute('aria-label',label+' A boar ranger mascot stands by the trail.');
       const changed=nextGrowth!==goalGrowth || active!==Boolean(next.active) || vehicle!==next.vehicle;
       if (!changed) return;
       goalGrowth=nextGrowth;

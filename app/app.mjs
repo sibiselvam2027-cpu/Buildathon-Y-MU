@@ -1,7 +1,7 @@
 import {destinations,parking,durations,durationText,rateFor,totalFor,getBooking,capacity,distance,distanceText,recommendations,resolveDestination,initialQuery,loadState,storageKey,reserve,arrive,leave} from './parking.mjs';
 import {parkingMap} from './map.mjs';
 import {mountPanorama} from './panorama.mjs';
-import {interpretRequest,warmAssistant} from './assistant.mjs';
+import {interpretRequest,warmAssistant,configureGemini,disconnectGemini} from './assistant.mjs';
 import {forestProgress,forestLevelMax,treeMinutes} from './forest-growth.mjs';
 import {mountForest} from './forest-scene.mjs';
 
@@ -345,7 +345,7 @@ async function findAgentSpot(text) {
     agentFeedback('No spot matches this request near '+placeById(query.destination).name+'. Try a higher budget or fewer filters.');
     return;
   }
-  agentFeedback(intent.usedModel?'Google Gemma understood your request.':'Found a spot using local matching.');
+  agentFeedback(intent.provider==='gemini'?'Gemini understood your request.':intent.usedModel?'Google Gemma understood your request.':'Found a spot using local matching.');
   agentOffer={spot,query,requestedDuration:intent.requestedDuration};
   renderAgentOffer(agentOffer);
 }
@@ -388,6 +388,53 @@ agentInput.addEventListener('input',clearAgentOffer);
 agentForm.addEventListener('submit',event=>{
   event.preventDefault();
   return findAgentSpot(agentInput.value.trim());
+});
+
+const geminiForm=$('#gemini-form');
+const geminiKey=$('#gemini-key');
+const geminiConnect=$('#gemini-connect');
+const geminiDisconnect=$('#gemini-disconnect');
+const geminiStatus=$('#gemini-status');
+let geminiAttempt=0;
+
+function updateGeminiControls(connected,pending=false) {
+  $('#gemini-settings').dataset.connected=String(connected);
+  $('#gemini-badge').textContent=connected?'Connected':pending?'Connecting':'Optional';
+  geminiConnect.disabled=connected || pending;
+  geminiKey.disabled=connected || pending;
+  geminiDisconnect.hidden=!connected && !pending;
+  geminiDisconnect.textContent=pending?'Cancel':'Disconnect';
+  geminiForm.setAttribute('aria-busy',String(pending));
+}
+
+geminiForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  if (geminiConnect.disabled) return;
+  const key=geminiKey.value.trim();
+  geminiKey.value='';
+  if (!key) {
+    geminiStatus.textContent='Enter a Gemini API key to connect.';
+    geminiKey.focus();
+    return;
+  }
+  const attempt=++geminiAttempt;
+  updateGeminiControls(false,true);
+  geminiStatus.textContent='Checking Gemini. Local matching is ready.';
+  let connected=false;
+  try {connected=await configureGemini(key);}
+  catch {}
+  if (attempt!==geminiAttempt) return;
+  updateGeminiControls(connected);
+  geminiStatus.textContent=connected?'Gemini connected for this session.':'Gemini could not connect. Check your key or network.';
+});
+
+geminiDisconnect.addEventListener('click',()=>{
+  geminiAttempt++;
+  disconnectGemini();
+  geminiKey.value='';
+  updateGeminiControls(false);
+  geminiStatus.textContent='Gemini cleared. Local matching is ready.';
+  geminiKey.focus();
 });
 
 async function enableLanguageModel(button) {

@@ -6,8 +6,38 @@ let modelWorker;
 let modelState = 'idle';
 let warming;
 let inference;
+let geminiSession;
+let geminiAttempt=0;
+const geminiEndpoint='https://generativelanguage.googleapis.com/v1beta/';
+const geminiModels=['gemini-3.1-flash-lite','gemini-3-flash-preview','gemini-2.5-flash-lite','gemini-2.5-flash','gemini-flash-latest'];
 
 export const assistantStatus = () => modelState;
+
+export function disconnectGemini() {
+  geminiAttempt++;
+  geminiSession=undefined;
+}
+
+export async function configureGemini(apiKey) {
+  disconnectGemini();
+  const attempt=geminiAttempt;
+  const key=String(apiKey??'').trim();
+  if (key.length<12 || /\s/.test(key)) return false;
+  try {
+    const response=await fetch(geminiEndpoint+'models?pageSize=100',{
+      headers:{'x-goog-api-key':key},signal:AbortSignal.timeout(8000)
+    });
+    if (!response.ok || attempt!==geminiAttempt) return false;
+    const data=await response.json();
+    const available=(data.models??[]).filter(item=>item.supportedGenerationMethods?.includes('generateContent'))
+      .map(item=>item.name?.replace(/^models\//,''));
+    const model=geminiModels.find(name=>available.includes(name))
+      ?? available.find(name=>/^gemini-[\w.-]+-flash(?:-lite)?$/.test(name));
+    if (!model || attempt!==geminiAttempt) return false;
+    geminiSession={key,model};
+    return true;
+  } catch {return false;}
+}
 
 // The standalone and hosted builds both use a worker so model downloads and inference leave the UI responsive.
 async function runModelWorker(runtimeUrl,modelId) {
@@ -249,9 +279,33 @@ function mergeModelIntent(result,text) {
   return understood ? {...result,criteria,requestedDuration,usedModel:true} : result;
 }
 
+async function geminiIntent(session,text,result) {
+  try {
+    const response=await fetch(geminiEndpoint+'models/'+encodeURIComponent(session.model)+':generateContent',{
+      method:'POST',
+      headers:{'x-goog-api-key':session.key,'Content-Type':'application/json'},
+      signal:AbortSignal.timeout(8000),
+      body:JSON.stringify({
+        systemInstruction:{parts:[{text:modelPrompt}]},
+        contents:[{role:'user',parts:[{text:String(text).slice(0,400)}]}],
+        generationConfig:{responseMimeType:'application/json',temperature:0,maxOutputTokens:256}
+      })
+    });
+    if (!response.ok) return null;
+    const payload=await response.json();
+    if (geminiSession!==session) return null;
+    const parts=payload.candidates?.[0]?.content?.parts??[];
+    const interpreted=mergeModelIntent(result,parts.filter(part=>!part.thought).map(part=>part.text??'').join(''));
+    return interpreted.usedModel ? {...interpreted,provider:'gemini'} : null;
+  } catch {return null;}
+}
+
 export async function interpretRequest(text) {
   const result = readRequest(text);
-  if (result.clarification || modelState!=='ready' || inference) return result;
+  if (result.clarification) return result;
+  const session=geminiSession;
+  if (session) return await geminiIntent(session,text,result) ?? result;
+  if (modelState!=='ready' || inference) return result;
 
   let timeout;
   const cutoff = new Promise(resolve=>{timeout=setTimeout(resolve,8_000);});
