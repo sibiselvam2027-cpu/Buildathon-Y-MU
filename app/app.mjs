@@ -345,7 +345,7 @@ async function findAgentSpot(text) {
     agentFeedback('No spot matches this request near '+placeById(query.destination).name+'. Try a higher budget or fewer filters.');
     return;
   }
-  agentFeedback(intent.usedModel?'Matched with SmolLM2.':'Found a spot you can reserve.');
+  agentFeedback(intent.usedModel?'Google Gemma understood your request.':'Found a spot using local matching.');
   agentOffer={spot,query,requestedDuration:intent.requestedDuration};
   renderAgentOffer(agentOffer);
 }
@@ -392,17 +392,17 @@ agentForm.addEventListener('submit',event=>{
 
 async function enableLanguageModel(button) {
   const status=$('#agent-model-status');
-  status.textContent='Downloading the model. Search still works.';
+  status.textContent='Loading Google Gemma. Local search is available.';
   button.disabled=true;
   try {
     if (await warmAssistant()) {
-      status.textContent='SmolLM2 ready on this device.';
-      button.textContent='SmolLM2 enabled';
+      status.textContent='Gemma is ready on this device.';
+      button.textContent='Google Gemma connected';
       return;
     }
   } catch {}
-  status.textContent='Model unavailable. Local matching is ready.';
-  button.textContent='Retry SmolLM2';
+  status.textContent='Gemma couldn’t load. Local matching is ready.';
+  button.textContent='Retry Google Gemma';
   button.disabled=false;
 }
 

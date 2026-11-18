@@ -1,7 +1,7 @@
 import {destinations,durations} from './parking.mjs';
 
-export const modelName = 'HuggingFaceTB/SmolLM2-135M-Instruct';
-const runtime = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
+export const modelName = 'onnx-community/gemma-3-270m-it-ONNX';
+const runtime = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0';
 let modelWorker;
 let modelState = 'idle';
 let warming;
@@ -12,20 +12,19 @@ export const assistantStatus = () => modelState;
 // The standalone and hosted builds both use a worker so model downloads and inference leave the UI responsive.
 async function runModelWorker(runtimeUrl,modelId) {
   try {
+    const adapter = await navigator.gpu?.requestAdapter();
+    if (!adapter?.features.has('shader-f16')) {
+      self.postMessage({type:'unavailable',reason:'webgpu'});
+      return;
+    }
     const {pipeline,env} = await import(runtimeUrl);
     env.allowLocalModels = false;
-    const wasm = env.backends?.onnx?.wasm;
-    if (wasm) {
-      wasm.numThreads = 1;
-      wasm.proxy = false;
-    }
-    const generate = await pipeline('text-generation',modelId,{device:'wasm',dtype:'q8'});
+    const generate = await pipeline('text-generation',modelId,{device:'webgpu',dtype:'q4f16'});
     self.onmessage = async ({data}) => {
       try {
         const result = await generate([
-          {role:'system',content:data.prompt},
-          {role:'user',content:data.text}
-        ],{max_new_tokens:80,do_sample:false,return_full_text:false});
+          {role:'user',content:data.prompt+'\nParking request: '+JSON.stringify(data.text)}
+        ],{max_new_tokens:60,do_sample:false,return_full_text:false});
         const output = result[0]?.generated_text;
         self.postMessage({type:'result',text:typeof output==='string'?output:output?.at(-1)?.content});
       } catch {
@@ -59,7 +58,7 @@ export function warmAssistant() {
       const code = '('+runModelWorker.toString()+')('+JSON.stringify(runtime)+','+JSON.stringify(modelName)+');';
       url = URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
       modelWorker = new Worker(url,{type:'module'});
-      timeout = setTimeout(unavailable,120_000);
+      timeout = setTimeout(unavailable,180_000);
       modelWorker.onerror = unavailable;
       modelWorker.onmessage = ({data})=>{
         if (data.type==='ready') {
@@ -227,7 +226,7 @@ function mergeModelIntent(result,text) {
   let candidate;
   try {candidate=JSON.parse(json);} catch {return result;}
   const criteria = {...result.criteria};
-  let added = false;
+  let understood = false;
   const choices = {
     vehicle: new Set(['car','bike']),
     sort: new Set(['price','rating','distance']),
@@ -235,18 +234,19 @@ function mergeModelIntent(result,text) {
     type: new Set(['Office','Society','Public lot'])
   };
   for (const [key,allowed] of Object.entries(choices)) {
-    if (!Object.hasOwn(criteria,key) && allowed.has(candidate[key])) {
-      criteria[key] = candidate[key];
-      added = true;
+    if (allowed.has(candidate[key])) {
+      if (!Object.hasOwn(criteria,key)) criteria[key]=candidate[key];
+      if (criteria[key]===candidate[key]) understood=true;
     }
   }
   let requestedDuration = result.requestedDuration;
   if (!criteria.duration && Number.isInteger(candidate.minutes) && candidate.minutes>0 && candidate.minutes<=durations.at(-1)) {
     requestedDuration = candidate.minutes;
     criteria.duration = durations.find(value=>value>=requestedDuration);
-    added = true;
+    understood = true;
   }
-  return added ? {...result,criteria,requestedDuration,usedModel:true} : result;
+  if (requestedDuration!==null && requestedDuration===candidate.minutes) understood=true;
+  return understood ? {...result,criteria,requestedDuration,usedModel:true} : result;
 }
 
 export async function interpretRequest(text) {
@@ -254,7 +254,7 @@ export async function interpretRequest(text) {
   if (result.clarification || modelState!=='ready' || inference) return result;
 
   let timeout;
-  const cutoff = new Promise(resolve=>{timeout=setTimeout(resolve,3_000);});
+  const cutoff = new Promise(resolve=>{timeout=setTimeout(resolve,8_000);});
   const prediction = new Promise(resolve=>{
     inference = resolve;
     try {modelWorker.postMessage({prompt:modelPrompt,text:String(text).slice(0,400)});}
