@@ -52,25 +52,6 @@
       </form>
       <p id="agent-feedback" class="agent-feedback" role="status" hidden></p>
       <div id="agent-response" class="agent-response" aria-label="Parking recommendation" hidden></div>
-      <details class="agent-cloud" id="gemini-settings">
-        <summary><span>Connect Gemini</span><span id="gemini-badge">Optional</span></summary>
-        <form class="agent-cloud-form" id="gemini-form" method="post" autocomplete="off">
-          <label for="gemini-key">Google Gemini API key</label>
-          <div class="agent-cloud-entry">
-            <input type="password" id="gemini-key" maxlength="256" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="gemini-note" required>
-            <button class="primary" type="submit" id="gemini-connect">Connect</button>
-          </div>
-          <p id="gemini-note">The key stays in memory for this session. Gemini requests go to Google.</p>
-          <div class="agent-cloud-status">
-            <span id="gemini-status" role="status">Local matching is ready.</span>
-            <button type="button" id="gemini-disconnect" hidden>Disconnect</button>
-          </div>
-        </form>
-      </details>
-      <div class="agent-model-tools">
-        <button type="button" id="agent-model" data-action="enable-llm">Connect Google Gemma</button>
-        <span id="agent-model-status" role="status">On-device model · WebGPU required</span>
-      </div>
     </section>
 
     <section class="manual-search" aria-labelledby="manual-title">

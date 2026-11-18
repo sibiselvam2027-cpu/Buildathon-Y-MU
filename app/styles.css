@@ -105,24 +105,6 @@ h1, h2, h3, p { margin: 0; }
 .agent-suggestion button:hover { background: #3a4d35; }
 .agent-hero button:focus-visible { outline-color: #f5ffdf; }
 .agent-feedback { color: #edf1e5; font-size: 12px; font-weight: 700; }
-.agent-cloud { border: 1px solid #79906c; background: #1b2a1e; color: var(--cream); }
-.agent-cloud summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 35px; padding: 5px 8px; cursor: pointer; font-size: 11px; font-weight: 800; list-style: none; }
-.agent-cloud summary::-webkit-details-marker { display: none; }
-.agent-cloud summary:hover { background: #2c4130; }
-.agent-cloud summary:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
-#gemini-badge { padding: 1px 5px; border: 1px solid #687e58; color: #cbdcad; font-size: 10px; }
-.agent-cloud[data-connected="true"] #gemini-badge { background: #344832; color: var(--lime); }
-.agent-cloud-form { display: grid; gap: 6px; padding: 8px; border-top: 1px solid #627757; font-size: 11px; font-weight: 700; }
-.agent-cloud-entry, .agent-cloud-status { display: flex; align-items: center; gap: 6px; }
-.agent-cloud-entry input { flex: 1; width: 100%; min-width: 0; min-height: 34px; padding: 4px 6px; border: 1px solid #79906c; background: #19291e; color: var(--cream); }
-.agent-cloud-entry input:focus-visible { outline-color: var(--lime); }
-.agent-cloud-entry .primary { min-height: 34px; padding: 4px 7px; font-size: 11px; }
-.agent-cloud-form p { color: #cbdcad; font-size: 10px; }
-.agent-cloud-status { justify-content: space-between; }
-#gemini-disconnect { min-height: 26px; color: var(--lime); text-decoration: underline; text-underline-offset: 3px; }
-.agent-model-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 8px; padding-top: 6px; border-top: 1px solid #627757; color: #cbdcad; font-size: 10px; font-weight: 700; }
-#agent-model { min-height: 26px; color: var(--lime); font-size: 10px; font-weight: 800; text-align: left; }
-#agent-model:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 2px; }
 .agent-response { padding: 11px; border: 2px solid #8b9c6a; background: var(--white); color: var(--ink); animation: spotlight-in .24s ease-out; }
 .agent-response button:focus-visible { outline-color: var(--leaf); }
 .agent-result-label { color: var(--leaf); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }

@@ -1,111 +1,5 @@
 import {destinations,durations} from './parking.mjs';
 
-export const modelName = 'onnx-community/gemma-3-270m-it-ONNX';
-const runtime = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0';
-let modelWorker;
-let modelState = 'idle';
-let warming;
-let inference;
-let geminiSession;
-let geminiAttempt=0;
-const geminiEndpoint='https://generativelanguage.googleapis.com/v1beta/';
-const geminiModels=['gemini-3.1-flash-lite','gemini-3-flash-preview','gemini-2.5-flash-lite','gemini-2.5-flash','gemini-flash-latest'];
-
-export const assistantStatus = () => modelState;
-
-export function disconnectGemini() {
-  geminiAttempt++;
-  geminiSession=undefined;
-}
-
-export async function configureGemini(apiKey) {
-  disconnectGemini();
-  const attempt=geminiAttempt;
-  const key=String(apiKey??'').trim();
-  if (key.length<12 || /\s/.test(key)) return false;
-  try {
-    const response=await fetch(geminiEndpoint+'models?pageSize=100',{
-      headers:{'x-goog-api-key':key},signal:AbortSignal.timeout(8000)
-    });
-    if (!response.ok || attempt!==geminiAttempt) return false;
-    const data=await response.json();
-    const available=(data.models??[]).filter(item=>item.supportedGenerationMethods?.includes('generateContent'))
-      .map(item=>item.name?.replace(/^models\//,''));
-    const model=geminiModels.find(name=>available.includes(name))
-      ?? available.find(name=>/^gemini-[\w.-]+-flash(?:-lite)?$/.test(name));
-    if (!model || attempt!==geminiAttempt) return false;
-    geminiSession={key,model};
-    return true;
-  } catch {return false;}
-}
-
-// The standalone and hosted builds both use a worker so model downloads and inference leave the UI responsive.
-async function runModelWorker(runtimeUrl,modelId) {
-  try {
-    const adapter = await navigator.gpu?.requestAdapter();
-    if (!adapter?.features.has('shader-f16')) {
-      self.postMessage({type:'unavailable',reason:'webgpu'});
-      return;
-    }
-    const {pipeline,env} = await import(runtimeUrl);
-    env.allowLocalModels = false;
-    const generate = await pipeline('text-generation',modelId,{device:'webgpu',dtype:'q4f16'});
-    self.onmessage = async ({data}) => {
-      try {
-        const result = await generate([
-          {role:'user',content:data.prompt+'\nParking request: '+JSON.stringify(data.text)}
-        ],{max_new_tokens:60,do_sample:false,return_full_text:false});
-        const output = result[0]?.generated_text;
-        self.postMessage({type:'result',text:typeof output==='string'?output:output?.at(-1)?.content});
-      } catch {
-        self.postMessage({type:'result'});
-      }
-    };
-    self.postMessage({type:'ready'});
-  } catch {
-    self.postMessage({type:'unavailable'});
-  }
-}
-
-export function warmAssistant() {
-  if (warming && modelState!=='unavailable') return warming;
-  modelState = 'loading';
-  warming = new Promise(resolve=>{
-    let timeout;
-    let url;
-    const releaseUrl = ()=>{if (url) URL.revokeObjectURL(url);};
-    const unavailable = ()=>{
-      clearTimeout(timeout);
-      releaseUrl();
-      modelWorker?.terminate();
-      modelWorker = undefined;
-      modelState = 'unavailable';
-      inference?.();
-      inference = undefined;
-      resolve(false);
-    };
-    try {
-      const code = '('+runModelWorker.toString()+')('+JSON.stringify(runtime)+','+JSON.stringify(modelName)+');';
-      url = URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
-      modelWorker = new Worker(url,{type:'module'});
-      timeout = setTimeout(unavailable,180_000);
-      modelWorker.onerror = unavailable;
-      modelWorker.onmessage = ({data})=>{
-        if (data.type==='ready') {
-          clearTimeout(timeout);
-          releaseUrl();
-          modelState = 'ready';
-          resolve(true);
-        } else if (data.type==='result') {
-          inference?.(data.text);
-          inference = undefined;
-        } else if (data.type==='unavailable') unavailable();
-      };
-    } catch {unavailable();}
-  });
-  return warming;
-}
-
 const numberWords = {
   one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10,
   fifteen:15, twenty:20, thirty:30, forty:40, fortyfive:45, fifty:50, sixty:60, ninety:90,
@@ -246,10 +140,6 @@ function readRequest(text) {
 
 export const parseRequest = text => readRequest(text).criteria;
 
-const modelPrompt = 'Extract parking preferences from the user request. Return one JSON object only. '+
-  'Include only stated preferences. Allowed keys: vehicle (car or bike), minutes (1 to 360), sort (price, rating or distance), '+
-  'amenity (Covered, Security, CCTV, EV charging, Wide bays, Well lit or Lift access), type (Office, Society or Public lot). Omit absent fields.';
-
 function mergeModelIntent(result,text) {
   const json = text?.match(/\{[^{}]*\}/)?.[0];
   if (!json) return result;
@@ -279,45 +169,20 @@ function mergeModelIntent(result,text) {
   return understood ? {...result,criteria,requestedDuration,usedModel:true} : result;
 }
 
-async function geminiIntent(session,text,result) {
-  try {
-    const response=await fetch(geminiEndpoint+'models/'+encodeURIComponent(session.model)+':generateContent',{
-      method:'POST',
-      headers:{'x-goog-api-key':session.key,'Content-Type':'application/json'},
-      signal:AbortSignal.timeout(8000),
-      body:JSON.stringify({
-        systemInstruction:{parts:[{text:modelPrompt}]},
-        contents:[{role:'user',parts:[{text:String(text).slice(0,400)}]}],
-        generationConfig:{responseMimeType:'application/json',temperature:0,maxOutputTokens:256}
-      })
-    });
-    if (!response.ok) return null;
-    const payload=await response.json();
-    if (geminiSession!==session) return null;
-    const parts=payload.candidates?.[0]?.content?.parts??[];
-    const interpreted=mergeModelIntent(result,parts.filter(part=>!part.thought).map(part=>part.text??'').join(''));
-    return interpreted.usedModel ? {...interpreted,provider:'gemini'} : null;
-  } catch {return null;}
-}
-
 export async function interpretRequest(text) {
-  const result = readRequest(text);
-  if (result.clarification) return result;
-  const session=geminiSession;
-  if (session) return await geminiIntent(session,text,result) ?? result;
-  if (modelState!=='ready' || inference) return result;
-
-  let timeout;
-  const cutoff = new Promise(resolve=>{timeout=setTimeout(resolve,8_000);});
-  const prediction = new Promise(resolve=>{
-    inference = resolve;
-    try {modelWorker.postMessage({prompt:modelPrompt,text:String(text).slice(0,400)});}
-    catch {
-      inference = undefined;
-      resolve();
-    }
-  });
-  const output = await Promise.race([prediction,cutoff]);
-  clearTimeout(timeout);
-  return mergeModelIntent(result,output);
+  const result=readRequest(text);
+  if (result.clarification || !['https:','http:'].includes(globalThis.location?.protocol)) return result;
+  try {
+    const response=await fetch('/api/parking-intent',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      signal:AbortSignal.timeout(10000),
+      body:JSON.stringify({text:String(text).slice(0,240)})
+    });
+    if (!response.ok) return result;
+    const payload=await response.json();
+    if (typeof payload.text!=='string') return result;
+    const interpreted=mergeModelIntent(result,payload.text);
+    return interpreted.usedModel ? {...interpreted,provider:'gemini'} : result;
+  } catch {return result;}
 }
